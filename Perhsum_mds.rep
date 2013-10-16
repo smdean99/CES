@@ -1,0 +1,3198 @@
+
+;Initialize constants
+#_zero 0
+#_one 1
+#_hun 100
+#_true 1
+#_false 0
+#_noord -7; not a possible display order value
+$_rowbase row1
+$_frowbase _frow1
+$_idxbase index1
+$_fidxbase _findex1
+$_grpbase g0000
+$_irrbdatex irr0000
+$_type _ty_
+$_full _fn_
+$_acnm _an_
+$_allmem *
+$_dash -;
+$_na NA;
+$_account Account;
+$x x ;
+$_sp $1x;
+$_ubar _;
+$bans 2
+;dialog defaults
+$_perfsegs PortPerf
+$_totprt totport;
+;Portfolio Performance Cross Reference footnote
+$_rptfoot n; ** Portfolio's performance was calculated as of portfolio's close date;
+;for management mode remove PC as Reporting currency
+if $arg "1" =*
+  fxnopc y
+
+;DEBUG
+;$_perfsegs SecPerf;SecPerf;PortPerf;AssetClass;IndSector;AssetClass
+;%cutdate 083101
+;%date1 073101
+
+call I Dialog And Settings 663
+
+;parse $_perfsegs to $_pclsn0..25 #_pclid0..25 $_pclln0..25 #_pclcnt $_secseg $_othseg $_doast (y/n) $_dosec (y/n/o)
+pclparse $_perfsegs
+plkcnt #_pclcnt
+$_savperf $_perfsegs
+$_pfcalc ;
+strupr $_pclln0 $_pcllnup
+strupr $_pclsn0 $_x
+if $_x "PORTPERF" =*
+  $_portperf y
+  $_extfee y
+  cvt $_title $title;
+  if $arg "1" =*!
+    #_col1wid 22; if change must also change $20 and $<20
+  else
+    if $_showpc "y" =*
+      #_col1wid 64
+    else
+      #_col1wid 38; if change must also change $20, $<20 and #_base
+else
+  $_portperf ;
+  $_extfee ;
+  if $_dosec "n" =*
+    $_pfcalc y
+  cvt $_title $title BY $_pcllnup;
+  #_col1wid 41; if change must also change $40 
+#_col2wid 12
+#_minwidth $_title @$ 2 *; 2 because the title is likely a large font and we want it on one line
+fmtdate 4; mm-dd-ccyy
+fxmap n
+fxrc $fx
+nava n
+if $arg "1" =*!
+else
+  management
+
+endmonth #cutdate
+#_savcut #cutdate
+cutdate #cutdate
+if $arg "1" =*!
+  if $_dosec "n" =*
+    frame onepage
+
+if $arg "1" =*!
+else
+  if $_gronly "y" =*
+    graph only
+
+if $perffee "y" =*
+  $prf .prf
+else
+  $prf .pbf
+ext $prf
+
+
+;The $rowX portfolio and firmwide labels define either asset class letters or index names.
+;They only apply to PortPerf.
+;We show a row for each such asset class and index.
+;For other classifications we show a row for each member and a total.
+;We show the standard indexes ($indexX) for all classifications.
+
+;We use either the index and row labels from the portfolio or firmwide.
+;So we must be careful not to merge them.
+
+fixarray $row1
+fixarray $index1
+;save firmwide row labels
+if $_portperf "y" =* $arg "1" =*! &
+  $_src $_rowbase
+  $_dst $_frowbase
+  call ~Copy array
+  call w Build asset class long name array
+;save firmwide index labels
+$_src $_idxbase
+$_dst $_fidxbase
+call ~Copy array
+
+ixload f
+if $arg "1" =*!
+  $_dishdr y
+else
+  $chkmulti y
+  $_missirr mirr000
+  $$_missirr ?
+  call k initialize weighted averages
+  $_clsmod n;
+  call K set headers
+  call C display header
+  $_dishdr n
+$_clsmod n
+$chkmulti y
+$_missirr mirr000
+$$_missirr ?
+call k initialize weighted averages
+call K set headers
+call C display header
+call B Initialize Client
+
+load cli
+
+fixarray $row1
+fixarray $index1
+ixload
+call E Initialize driver arrays
+$_hasaclass n
+if $_portperf "y" =*  $arg "1" =*! &
+  call vcheck row labels for asset class
+  if $_hasaclass "y" =* ; If performance classification is PortPerf and $colx has an Asset class, use AssetClass.
+    $_perfsegs AssetClass; we'll need asset class data when there are row labels that select asset classes
+    pclparse $_perfsegs
+    strupr $_pclln0 $_pcllnup
+    plkcnt #_pclcnt
+    $_extfee ;
+    $_pfcalc y;
+
+;always override $dtdirr from portfolio settings
+$dtdirr $sv_dtdirr
+
+;Since Specified Date (IRR)
+if $dtdirr "y" =* $dtdirr "Y" =* |
+  gauge 2
+  ext .cli
+;remember the users selection for our calculations
+;in order to get full fee functionality rep must run net of fees.
+  $_perffee $perffee
+  $perffee y
+;set up a label to include or exclude feeacb
+;we add feeacb to the net acb to get the gross acb
+  if $_perffee "n" =* $acb "y" =* &
+    $_feeacb :nvaln
+  else
+    $_feeacb _zero
+;set up the method text
+  if $acb "5" =*
+    $_meth Discounted Cash Flow Method
+    #_fifth 1 5 /
+    $_nval2 _fifth; rep multiplies nval2 by five
+  else
+    $_meth Average Capital Base Method
+    $_nval2 _one; nval2 is itself
+  if #stdate #date1 >
+    #_irrdate1 #stdate
+  #date1 #_irrdate1
+  if $arg "1" =*!
+    cvt $desc0x d0$_irrbdatex
+    cvt $desc1x d1$_irrbdatex
+    cvt $desc2x d2$_irrbdatex
+    cvt $desc3x d3$_irrbdatex
+    #_perbeg #_irrdate1
+    #_perend #cutdate
+    call ~period
+    cvt $$desc0x            ; 
+    cvt $$desc3x IRR Since %_irrdate1;
+    undeferr n
+    if $_ann "o" =* #period #_one > &  
+      cvt $$desc0x Annualized  ;
+      cvt $$desc3x Annualized IRR Since %_irrdate1;
+    undeferr y  
+    cvt $$desc1x IRR Since  ;
+    cvt $$desc2x %_irrdate1      ;
+  #_date0 #date1
+  #_date1 #cutdate
+  cfperiod #date1 #cutdate
+  oneside n
+  perf y
+  if $_pfcalc "" =*!
+    pfsave y; save all perf flow data inside rep
+  movdate1 y
+  sum #date1
+  lump #date1
+  cutdate #cutdate
+  #_igdate #date1 1-
+  endmonth #_igdate
+  fxignore #_igdate
+  get * ?y* "ep
+  call ~get irr
+  $perffee $_perffee;reset perffee
+
+;Include totport records. This is what we use for our total.
+if $_doast "y"=*
+  $_addac y;
+  $_incept y;
+else
+  $_addac n;
+  if $itd "y" =* $arg "1" =* |
+    $_incept y
+  else
+    $_incept n
+    call j find #_date1
+    #date1 #_date1
+
+;GET PERFORMANCE HISTORY
+$_dorange y; ask rep to set the minfrom and maxthru labels
+phcomp
+cvt $_uidst $:fileo$prf
+uiname $_uidst $_uidst
+ext $prf
+cfperiod; turn off cfperiod
+dealloc; discard first pass tranpool
+lump #_zero
+sum #_zero
+oneside y
+perf n
+movdate1 n
+cutdate #cutdate
+fxignore #cutdate
+get * *
+
+;Load pcl data
+phist
+
+fxignore #_zero
+
+if $status "n" =*
+  goto z Next Client
+
+;if portfolio closes mid month, adjust latest 1,3,5 to use prior month end
+if #clsdate @?!
+  endmonth +#clsdate
+  #_clsmod #clsdate 1+ 31 %
+  if #clsdate #cutdate = #_clsmod #_zero =! &
+    $_clsmod y;
+
+; initialize asset class
+label ~K init value
+if $_doast "y" =*
+  $class $:curclass
+  $recur $_ubar$class
+  #$recur #:miss
+  if $class " " =*!
+    goto ~K
+
+;set start date and clump by member in display order
+#_stdate #:miss
+#pitdate #:miss
+load tran
+if #_stdate @? $:snmb1 $_totprt =* &
+  #_stdate #:phfrdate
+  #pitdate #_stdate
+#_prfend #:date
+next tran
+rewind
+if $_doast "y" =*
+  load tran
+  if $:snmb1 $_totprt =*
+    #pitdate #:date; save last totport date
+  $x $_ubar$:snmb1; create _e, _f, ...
+  undeferr n
+  if #$x @?
+    #$x #pitdate; save last totport date in #_e, #_f, ...
+  undeferr y
+  next tran
+  rewind
+if #_stdate @?
+  if $arg "1" =*!
+    screen
+    .Skipping $:fileo because there is no performance history available for this report request ($_pcllnup, $:rcurr, %cutdate).\n
+    screen
+    error
+    goto z Next Client    
+  else
+    if #_stdate #cutdate >=
+      screen
+      .Skipping $:fileo because the $:rcname start date is after %cutdate\n
+      screen
+      error
+      goto z Next Client; below will assume stdate<cutdate (or get stuck in infinite loop)
+    else
+      cvt $sym ex$:rcurr$:fileo
+      list gen $sym
+      list move
+
+;always override $dtd from portfolio settings
+$dtd $sv_dtd
+if $arg "1" =* $arg "1" =*! $_overps "y" =* & |
+;in portfolio mode, user can choose to overide portfolio settings 
+;in management mode, always override portfolio settings
+  $atd $sv_atd
+  $wtd $sv_wtd
+  $mtd $sv_mtd
+  $qtd $sv_qtd
+  $ytd $sv_ytd
+  $l1y $sv_l1y
+  $l3y $sv_l3y
+  $l5y $sv_l5y
+  $lty $sv_lty
+  $lfy $sv_lfy
+  $itd $sv_itd
+
+if $arg "1" =*!
+  if #_stdate #date1 >
+    #_twrdate1 #_stdate
+#date1 #_twrdate1
+
+call K set headers
+if #nperiods #_zero =
+  screen
+  .You must choose at least one date range to appear on the report. Skipping $_uidst.\n
+  screen
+  error
+  goto z Next Client
+
+;clump by member in display order
+if $_dosec "n" =*!
+  sort symb
+  rewind
+  sort fname
+else
+  sort tval #:phord
+
+;DEBUG
+;comma n
+;usfmt y
+;load tran
+;.$:code %:phfrdate %:date $:snmb1 #2:llcommis #:phpcl #:phplk\n
+;next tran
+;rewind
+;comma y
+;usfmt n
+
+;OUTPUT RESULTS
+$groupx $_grpbase
+$_portcode $:fileo
+label X
+$_tpstyle ;
+$_target $$groupx
+if $_target "?" =*!
+  cvt $gtypex $_type$groupx
+  $_ty $$gtypex
+  if $_ty "T" =* $_ty "M" =* |
+    if $_ty "T" =*
+      if $arg "1" =*!
+        $_display $_account;
+      else
+        $_display $name;
+      if $_portperf "y" =*!
+        $_tpstyle y
+    else
+      cvt $gfullx $_full$groupx
+      if $_target $_allmem =*!
+        $_display $$gfullx;
+    call G Display Port TWRs for $_target
+  else
+    if $arg "1" =*!
+      call H Display this Index
+  bump $groupx
+  goto X
+
+label z Next Client
+$_missirr mirr000
+screen
+call Missing IRR Error Messages
+screen
+missdata
+if $_perfsegs $_savperf =*!
+  $_perfsegs $_savperf
+  pclparse $_perfsegs
+  plkcnt #_pclcnt
+  $_pfcalc ;
+  strupr $_pclln0 $_pcllnup
+  strupr $_pclsn0 $_x
+  if $_x "PORTPERF" =*
+    $_portperf y;
+    $_extfee y
+  else
+    $_portperf ;
+    $_extfee ;
+    if $_dosec "n" =*
+      $_pfcalc y
+call B Initialize Client
+next cli
+
+if $arg "1" =*!
+else
+  if $_wgtavg "y" =*
+    call ~display equal weighted averages
+  if $_rptfoot "y" =*
+    .\n** Portfolio's performance was calculated as of portfolio's close date.\n
+  $_missirr mirr000
+  screen
+  call Missing IRR Error Messages
+  screen
+  missdata
+  $_clsmod n;
+  call K set headers
+;OUTPUT RESULTS
+  $groupx $_grpbase
+label ~X
+  $_tpstyle ;
+  $_target $$groupx
+  if $_target "?" =*!
+    cvt $gtypex $_type$groupx
+    $_ty $$gtypex
+    if $_ty "T" =*! $_ty "M" =*! &
+      call H Display this Index
+    bump $groupx
+    goto ~X
+  call ~errors catalog 637
+  load list
+  dealloc
+  next list
+end
+
+;============================================================================
+
+;--------------------------------------
+label B Initialize Client
+;--------------------------------------
+$chkmulti y
+$_missirr mirr000
+$$_missirr ?
+if $arg "1" =*!
+  $_dishdr y
+
+$name2 ?
+$name3 ?
+$_clsmod n;
+#_stdate #:miss
+#_prfend #:miss
+if $savbdx "?" =*!
+  #$savbdx #_zero; resetting stdate recursive labe.
+
+$atd $sv_atd
+$wtd $sv_wtd
+$mtd $sv_mtd
+$qtd $sv_qtd
+$ytd $sv_ytd
+$l1y $sv_l1y
+$l3y $sv_l3y
+$l5y $sv_l5y
+$lty $sv_lty
+$lfy $sv_lfy
+$itd $sv_itd
+$dtd $sv_dtd
+$dtdirr $sv_dtdirr
+
+;do not inherit row or index labels from prior portfolio
+if $arg "1" =*!
+  undeferr n
+  $_rowtemp $_rowbase
+label m
+  if $$_rowtemp "?" =*!
+    $$_rowtemp ?
+    bump $_rowtemp
+    goto m
+
+  $_idxtemp $_idxbase
+label n
+  if $$_idxtemp "?" =*!
+    $$_idxtemp ?
+    bump $_idxtemp
+    goto n
+  undeferr y
+
+if $dtd "y" =* $dtd "Y" =* | $dtdirr "y" =* $dtdirr "Y" =* | |
+  #date1 #_savdate1
+  #_irrdate1 #_savdate1
+  #_twrdate1 #_savdate1
+  if $dtdirr "y" =* $dtdirr "Y" =* |
+    $_plkids A000000
+label xclear plkids
+    undeferr n
+    if $$_plkids "?" =*!
+    undeferr y
+      #$$_plkids #:miss
+      bump $_plkids
+      goto xclear plkids
+
+#cutdate #_savcut
+cutdate #cutdate
+return
+
+;--------------------------------------
+label C Display Header
+;--------------------------------------
+
+pbreak
+dsclaim $dsclaim
+fnote
+
+if $arg "1" =*
+  if $_graph "y" =*
+    call ~F do graph
+
+head
+if $firm "?" =*!
+  .$^firm\n
+$_title PERFORMANCE HISTORY with PREDEFINED PERIODS
+.$^_title\fC
+undeferr n
+if $_ann "a" =*
+undeferr y
+  $_title2 ANNUALIZED;
+  .$^_title2\fC
+if $_print "y" =*
+  if $perffee "n" =*
+    $_title3 GROSS OF FEES
+  else
+    $_title3 NET OF;
+    if $alloc "y" =*
+      cvt $_title3 $_title3 ALLOCATED;
+    if $_accfee "y" =*
+      cvt $_title3 $_title3 ACCRUED;
+    cvt $_title3 $_title3 FEES
+  .$^_title3\fC
+;if $arg "1" =*!
+;  .$^name\n
+;  if $name2 "?" =*!
+;    .$^name2\n
+;  if $name3 "?" =*!
+;    .$^name3\n
+;else
+;  if $cligrp "" =*!
+;    .$^cligrp\n 
+.%2^cutdate\n\n
+if $:rcurr $:scurr =*! $fxflip "y" =* |
+  cvt $_rcname Reporting Currency: $:rcname
+  .$_rcname\n\n
+
+$tabln ?;
+if $arg "1" =*!
+  if $_portperf "y" =*
+    cvt $colh0                                                                ;
+    cvt $colh1                                                                ;
+    cvt $colh2    Date            Composite                   Index           ;
+    cvt $colh3                                                                ;
+    cvt $unlin ----------  -----------------------  ------------------------- ;
+    #_base 11
+  else
+    $unlin ---------------------------------------- ;$40 + 1 space
+    cvt $colh0                                           ;
+    cvt $colh1                                           ;
+    $colh2 ; $_pclln0
+    $colh3 ; $_pclln0
+    #_base 41
+else
+  call ~Management mode headers
+$bdatex b0000
+cvt $desc0x d0$bdatex
+cvt $desc1x d1$bdatex
+cvt $desc2x d2$bdatex
+cvt $desc3x d3$bdatex
+#c #_zero
+#c #c @+
+#nexttab #_base 3 #c * +
+if $tabln "?" =*
+  cvt $tabln #nexttab
+else
+  cvt $tabln $tabln #nexttab
+#c #c @+
+#nexttab #_base 3 #c * +
+cvt $tabln $tabln #nexttab
+#_base 39
+label b
+if $$desc1x "?" =*!
+  undeferr n
+  cvt $colh0 $colh0$$desc0x;
+  cvt $colh1 $colh1$$desc1x;
+  cvt $colh2 $colh2$$desc2x;
+  cvt $colh3 $colh3$$desc3x;
+  undeferr y
+  cvt $unlin $unlin ---------- ;
+  #c #c @+
+  #nexttab #_base 12 #c * +
+  if $tabln "?" =*
+    cvt $tabln #nexttab
+  else
+    cvt $tabln $tabln #nexttab
+  bump $desc0x
+  bump $desc1x
+  bump $desc2x
+  bump $desc3x
+  goto b
+;IRR Since
+if $dtdirr "y" =* $dtdirr "Y" =* |
+  cvt $desc0x d0$_irrbdatex
+  cvt $desc1x d1$_irrbdatex
+  cvt $desc2x d2$_irrbdatex
+  cvt $desc3x d3$_irrbdatex
+  cvt $colh0 $colh0$$desc0x;
+  cvt $colh1 $colh1$$desc1x;
+  cvt $colh2 $colh2$$desc2x;
+  cvt $colh3 $colh3$$desc3x;
+  cvt $unlin $unlin ---------- ;
+  #c #c @+
+  #nexttab #_base 12 #c * +
+  if $tabln "?" =*
+    cvt $tabln #nexttab
+  else
+    cvt $tabln $tabln #nexttab
+if #dodesc0
+  .$colh0\n
+if #dodesc1
+  .$colh1 Cumulative   Inception\n
+if #dodesc2
+  if $arg "1" =*! $_portperf "y" =*! &
+    .$^40_pclln0 $colh2\n
+  else
+    if $bans "1" =*
+      .$colh2  Basis 0      Date\n
+    else
+      .$colh2 Basis 100     Date\n
+if #dodesc3
+  if $arg "1" =*! $_portperf "y" =*! &
+    .$^40_pclln0 $colh3\n
+  else
+    .$colh3\n
+cvt $unlin $unlin ----------  ----------;
+#c #c @+
+#nexttab #_base 12 #c * +
+cvt $tabln $tabln #nexttab
+#c #c @+
+#nexttab #_base 12 #c * +
+cvt $tabln $tabln #nexttab
+.$unlin\n
+~tablist $tabln
+head
+
+return
+
+;--------------------------------------
+label ~Management mode headers
+;--------------------------------------
+;Portfolio Code
+if $_showpc "y" =*
+  cvt $colh0                          ;
+  cvt $colh1                          ;
+  cvt $colh2   Portfolio Code         ;
+  cvt $colh3 Portfolio Code;
+  cvt $unlin ------------------------ ; 26
+; Portfolio
+  cvt $colh0 $colh0                          ;
+  cvt $colh1 $colh1                          ;
+  cvt $colh2 $colh2        Portfolio         ;
+  cvt $colh3 $colh3 Portfolio;
+  cvt $unlin $unlin ------------------------ ; 26
+else
+; Portfolio
+  cvt $colh0                          ;
+  cvt $colh1                          ;
+  cvt $colh2        Portfolio         ;
+  cvt $colh3 Portfolio;
+  cvt $unlin ------------------------ ; 26
+
+; Inception
+cvt $colh0 $colh0             ;
+cvt $colh1 $colh1 Inception   ;
+cvt $colh2 $colh2   Date      ;
+cvt $colh3 $colh3 Inception Date;
+cvt $unlin $unlin ----------- ; 12
+
+if $_showpc "y" =*
+  $tabln 28 54;
+  #_base 64;
+else
+  $tabln 28
+  #_base 38; if changed, also change label ~F
+return
+;------------------------  ---------- ;
+;~xxxxxxxxxxxxxxxxxxxxxxx  ~xxxxxxxxx ;
+
+;--------------------------------------
+label totport add to driver array
+;--------------------------------------
+$$groupx $_totprt
+cvt $gtypex $_type$groupx
+$$gtypex T
+cvt $gfullx $_full$groupx
+$$gfullx $_account
+bump $groupx
+return
+
+;--------------------------------------
+label E Initialize $groupx Array
+;--------------------------------------
+;These arrays control what we show.
+;The grpbase array lists the totport code, asset class codes and index names.
+;The ty_grpbase array indicates the type of each grpbase element I=index T=totport M=member.
+;The driver arrays are populated based on $_portperf, the row and index labels.
+;If an index label index appears as a row label index, skip it the second time.
+$_firstidx ;
+$groupx $_grpbase
+if $_portperf "y" =*!; all members displayed in natural order then totport
+  $$groupx $_allmem
+  cvt $gtypex $_type$groupx
+  $$gtypex M
+  bump $groupx
+  call totport add to driver array
+  $_firstidx $groupx
+  goto Add index labels to driver array
+
+;portperf - totport then row labels
+call totport add to driver array
+if $arg "1" =*!
+  $_base $_rowbase
+  undeferr n
+  if $$_base "?" =*; there are no portfolio row labels, use the firmwide row labels
+  undeferr y
+    $_base $_frowbase
+label ~D
+  undeferr n
+  $_x $$_base
+  undeferr y
+  if $_x "?" =*!
+    $$groupx $_x
+    cvt $gtypex $_type$groupx
+    cvt $_n $_acnm$_x
+    undeferr n
+    $_n $$_n
+    undeferr y
+    if $_n "?" =*; not a valid asset class so assume its an index
+      $$gtypex I
+    else
+      $_hasaclass y;
+      cvt $$groupx $_x; add type since we compare to type and symbol
+      $$gtypex M
+      cvt $gfullx $_full$groupx
+      $$gfullx $_n
+    bump $groupx
+    bump $_base
+    goto ~D
+
+;Add index label indexes skipping duplicate indexes.
+label Add index labels to driver array
+if $arg "1" =*!
+  $_base $_idxbase
+  undeferr n
+  if $$_base "?" =*; there are no portfolio index labels, use the firmwide index labels
+  undeferr y
+    $_base $_fidxbase
+else
+  $_base $_fidxbase
+label ~E
+undeferr n
+$_x $$_base
+undeferr y
+if $_x "?" =*!
+  $$groupx $_x
+  cvt $gtypex $_type$groupx
+  $$gtypex I
+  $_dup ;assume not a duplicate
+  $_baset $groupx
+label ~f
+  if $_baset $_grpbase =*!
+    bump -$_baset
+    if $$_baset $_x =*
+      cvt $gtypex $_type$_baset
+      if $$gtypex "I" =*
+        $_dup y
+        $_baset $_grpbase; end this loop
+    goto ~f
+  if $_dup "" =*
+    bump $groupx
+  bump $_base
+  goto ~E
+
+$$groupx ?
+
+;DEBUG
+;$groupx $_grpbase
+;label show 
+;$_x $$groupx
+;if $_x "?" =*!
+;  cvt $gtypex $_type$groupx
+;  $_t $$gtypex
+;  cvt $gfullx $_full$groupx
+;  undeferr n
+;  $_n $$gfullx
+;  undeferr y
+;  .$groupx $_x $_t $_n\n
+;  bump $groupx
+;  goto s
+
+return
+
+
+;--------------------------------------
+label G Display Port TWRs for $_target
+;--------------------------------------
+;Calculates and displays TWRs for all periods defined by the %#bdatex and %#edatex arrays.
+;Caller sets $_target to control what's printed.
+;The value $_allmem means all members (exclude totport).
+;Any other value means just that symbol (can be totport).
+;Assume already sorted so grouped by clump in display order and by descending date within each clump.
+
+if $_display "Account" =*
+  .%4cutdate~$25name~$25name
+else
+  return
+rewind
+$_code ;
+$_snmb1 ;
+$_type1 ;
+if #_stdate @? #_stdate #_zero = |
+  call u print for missing stdate
+else
+  load tran
+  if $_code $:code =*! $_snmb1 $:snmb1 =*! | $_type1 $:ftype1 =*! |
+    $_type1 $:ftype1
+    $_snmb1 $:snmb1
+    $_code $:code
+    if $_target $_allmem =*
+      if $_snmb1 $_totprt =*!
+        call print twr line for current tran
+    else
+      if $_target $_snmb1 =*
+        call print twr line for current tran
+  next tran
+return
+
+;--------------------------------------
+label u print for missing stdate
+;--------------------------------------
+$_twrx r0000; stores twr
+$$_twrx ??; initialize
+$bdatex b0000
+$edatex e0000
+if $arg "1" =*!
+else
+  $_cntx cnt0000
+  $_avgx avg0000
+label J Date Column Loop Begin
+if #$bdatex #:miss = #$edatex #:miss = |
+  goto L Date Column Loop End
+cvt $$_twrx ?;
+bump $_twrx
+$$_twrx ??;
+bump $bdatex
+bump $edatex
+if $arg "1" =*!
+else
+  bump $_cntx 
+  bump $_avgx
+goto J Date Column Loop Begin
+label L Date Column Loop End
+
+if $arg "1" =*!
+  if #_col1wid 22=
+;    .$20_display;
+  else
+;    .$40_display;
+else
+  if $_ty "T" =*
+    if $_showpc "y" =*
+;      .$_portcode ~;
+;  .$24_display ~%_stdate;
+$_twrx r0000;
+label O Print twr
+if $$_twrx "??" =*!
+  .$~$_twrx
+  $_temptwr $$_twrx
+  bump $_twrx
+  goto O Print twr
+if $dtdirr "y" =* $dtdirr "Y" =* |
+  cvt $_y _id_#_noord
+  #_irrval #$_y
+  .#~2_irrval
+  if $arg "1" =*!
+  else
+    if $_irrok "y" =*
+      #$_cntx #$_cntx #_one +
+      #$_avgx #$_avgx #_irrval +~
+
+if $bans "1" =*
+  .#~2svdrtn%~4stdate
+else
+  #svdrtn #svdrtn 100+~
+  .#~2svdrtn%~4stdate
+if $_tpstyle "" =*
+  .\fX
+else
+  .\fN
+return
+
+;--------------------------------------
+label print twr line for current tran
+;--------------------------------------
+if $_target $_allmem =*
+  $_display $:phplkt
+  if $_dosec "n" =*!
+    if $:code "si" =*
+      cvt $_display $_display (short);
+$_targnt $:snmb1
+
+$_twrx r0000; stores twr
+$$_twrx ??; initialize
+#_twry 0; flag to indicate that at least one period has a return.
+$bdatex b0000
+$edatex e0000
+
+if $arg "1" =*!
+else
+  $_cntx cnt0000
+  $_avgx avg0000
+
+if $_doast "y" =*
+  if $_snmb1 $_totprt =*
+    #_start #_stdate
+  else
+    $x $_ubar$_snmb1
+    #_start #$x
+else
+  #_start #_stdate
+
+label c Date Column Loop Begin
+if #$bdatex #_zero = $$edatex "y" =* |
+  if #_start @?
+    cvt $$_twrx $_dash;
+    goto y continue
+  else
+    #$bdatex #_start
+if #$bdatex #:miss = #$edatex #:miss = |
+  goto d Date Column Loop End
+
+if #_start @? #_start #_zero = |
+  if $_snmb1 $_totprt =*
+    $$_twrx ?;
+  else
+    cvt $$_twrx $_dash;
+  goto y continue
+
+if #_start #$edatex > #_stdate #$bdatex > |
+  cvt $$_twrx $_dash;
+  goto y continue
+
+if #_start #$bdatex > 
+  #_perbeg #_start
+else
+  #_perbeg #$bdatex
+#_perend #$edatex
+
+#rtn 1
+#found_bd #_false
+#found_ed #_false
+#found_in #_false
+
+label e process current tran  
+if $:ftype1 $_type1 =*! $:snmb1 $_snmb1 =*! $:code $_code =*! ||
+  tmove back
+  goto f move back to first of this clump
+if #:phfrdate #_perbeg >= #:date #_perend <= &
+  if #:phfrdate #_perbeg =
+    #found_bd #_true
+  #_irr #:llcommis
+  if $_target $_allmem =*
+    if $_dosec "n" =*!
+      if $_irrcalc "y" =*
+        #_irr #:phcirr
+  if #_irr @? #_irr @A! &
+    cvt $$_missirr $_uidst is missing the IRR for $_pcllnup "$_targnt" on %:date
+    bump $_missirr
+    $$_missirr ?
+  if #:date #_perbeg >
+    #rtn #_irr #_hun/ #_one+ #rtn*
+    #found_in #_true
+  if #:date #_perend =
+    #found_ed #_true
+  if #found_ed #found_bd &
+    goto f move back to first of this clump
+tmove forward
+if $status "y" =*!
+  goto f move back to first of this clump
+goto e process current tran  
+
+label f move back to first of this clump
+if $:ftype1 $_type1 =* $:snmb1 $_snmb1 =* $:code $_code =* &&
+  tmove back
+  if $status "y" =*
+    goto f
+else
+  tmove forward
+
+;call h check at first of clump
+
+#rtn #rtn #_one - #_hun *
+
+;;Only require complete data for PortPerf and Asset Class
+if $_portperf "y" =* $_snmb1 $_totprt =* & $_doast "y" =* |
+  if #found_bd!
+    cvt $$_missirr $_uidst is missing the IRR for $_pcllnup "$_targnt" on %_perbeg
+    bump $_missirr
+    $$_missirr ?
+    #rtn #:miss
+  if #found_ed!
+    cvt $$_missirr $_uidst is missing the IRR for $_pcllnup "$_targnt" on %_perend
+    bump $_missirr
+    $$_missirr ?
+    #rtn #:miss
+else
+  if #found_ed! #_maxthru #_perend < &
+    cvt $$_missirr $_uidst is missing the IRR for $_pcllnup "$_targnt" on %_perend
+    bump $_missirr
+    $$_missirr ?
+    #rtn #:miss
+  else
+    if #found_in!
+      $$_twrx $_dash;
+      goto y continue
+
+if #rtn @?!
+  #svdrtn #rtn
+  call ~period
+  if $_ann "o" =* #period #_one > &  $_ann "a" =* |
+    #rtn #rtn #_hun / #_one + #_one #period/ ^ #_one - #_hun *
+    cvt $desc0x d0$bdatex
+    if #$desc0x 1 =
+      cvt $$desc0x Annualized  ;
+      cvt $desc3x d3$bdatex
+      cvt $$desc3x Annualized $$desc3x;
+      #$desc0x 0;
+  if $arg "1" =*!
+  else
+    #$_cntx #$_cntx #_one +
+    #$_avgx #$_avgx #rtn +~
+
+if #rtn @A
+  cvt $$_twrx $_na;
+else
+  cvt $$_twrx #2rtn;
+#_twry 1;
+
+label y continue
+bump $_twrx
+$$_twrx ??;
+bump $bdatex
+bump $edatex
+if $arg "1" =*!
+else
+  bump $_cntx 
+  bump $_avgx
+goto c Date Column Loop Begin
+label d Date Column Loop END
+if $_dishdr "y" =*
+;  call C Display Header
+  if $_graph "y" =*
+    call F Do Graph
+  $_dishdr n;
+if #_twry  $dtdirr "y" =* $dtdirr "Y" =* | |
+  if $arg "1" =*!
+    if #_col1wid 22=
+;      .$20_display
+    else
+;      .$40_display
+  else
+    if $_ty "T" =*
+      if $_showpc "y" =*
+;        .$_portcode ~;
+;    .$24_display ~%_stdate;
+  $_twrx r0000;
+label ~Print twr
+  if $$_twrx "??" =*!
+    .$~$_twrx
+    $_temptwr $$_twrx
+    bump $_twrx
+    goto ~Print twr
+  if $dtdirr "y" =* $dtdirr "Y" =* |
+    if $_snmb1 $_totprt =*
+      cvt $_y _id_#_noord
+      #_irrval #$_y
+    else
+      if $_dosec "n" =*!
+        cvt $_y _id_#:secid
+      else
+        cvt $_y _id_#:phord
+      undeferr n
+      if #$_y @? #$_y @A! &
+        #_irrval #_zero
+      else
+        #_irrval #$_y
+      undeferr y 
+    .#~2_irrval
+    if $arg "1" =*
+      if $_irrok "y" =*
+        #$_cntx #$_cntx #_one +
+        #$_avgx #$_avgx #_irrval +~
+  if $arg "1" =* #clsdate #_savcut < #clsdate @?! #clsdate #_zero =! &&&
+    $_rptfoot y
+    . **;
+  if $bans "1" =*
+    .#~2svdrtn%~4stdate
+  else
+    #svdrtn #svdrtn 100+~
+    .#~2svdrtn%~4stdate
+  if $_tpstyle "" =*
+    .\fX
+  else
+    .\fN
+  if $_dosec "n" =*! 
+    if $:isbond "y" =*
+      if #_col1wid 22 =
+;        .$20:bdesc\g
+      else
+;        .$40:bdesc\g
+else
+  if $_display $_account =* $arg "1" =*! &
+    $_errmsg : No performance history data for the selected periods.;
+    .Portfolio $:fileo$_errmsg\n
+return
+
+;--------------------------------------
+label I Dialog And Settings 663
+;--------------------------------------
+$_graph n
+$_grxlmf ;
+$_grxlmn ;
+$_gronly n
+$_print y
+if $arg "1" =*!
+  $_grtype column
+  $_grfmt GL
+else
+  $_grtype bar
+  $_grfmt G
+  $alloc n;
+  $_irrcalc n;
+  $_grxlmf ;
+  $_grxlmn ;
+if $arg "1" =*!
+  $_asdtxt This report displays performance history for various periods, and compares the portfolio with up to nine indexes or asset classes of your choice.  This report calculates a time-weighted rate of return.
+else
+  $_asdtxt This report displays performance history for various periods, and compares the portfolio with up to nine indexes of your choice.
+$atd n
+$wtd n
+$mtd y
+$qtd y
+$ytd y
+$l1y y
+$l3y y
+$l5y y
+$itd y
+$dtd y
+$dtdirr n
+$_wgtavg n
+$_showpc n
+$_ann y
+cfuse y
+cfplus y
+rsetup dsclaim
+DIALOG
+ddexempt %date1 %cutdate; this statement only affects breu and repsh
+ACC $_asdtxt , ADDS_TEXT , , 55
+if $arg "1" =*!
+  ASCG_PORT_PERF
+  ASCG_ONEDATE
+  ASCG_PERFFEE
+;  ASCG_PERFSEG
+  ASCG_ACCFEE
+  ASCG_ALLOC_FEE
+;  ASCG_IRRCALC
+  ACC $bans , ADDS_RADIO , "1" , "0" "Cumulative TWR Basis Options" 35 2
+  ACC $bans , ADDS_RADIO , "2" , "100"
+  ASCG_FX
+else
+  ASCG_PORT_PERF
+  ASCG_CLIGRP
+  ASCG_ONEDATE
+  ASCG_FX
+  ASCG_PERFFEE
+  ASCG_ACCFEE
+ASCG_ANNUALIZE
+ASCG_GRAPH
+ACC $_print, ADDS_CHECK | ADDS_YESNO,, "Print 'Net of Fees' or 'Gross of Fees' in Hea&der"
+if $arg "1" =*!
+else
+  ACC $_wgtavg, ADDS_CHECK | ADDS_YESNO, , "Calculate equal &weighted averages"
+  ACC $_showpc, ADDS_CHECK | ADDS_YESNO, , "Print portfolio code in report output"
+ASCG_OKCANHELP
+ASCG_CONSOLIDATE
+ASCG_BROWSE
+ASCG_SENS
+END
+
+;If the user Okd the Settings dialog with 'Override Portfolio Settings' unchecked then 
+;the date range dialog labels that appear in the portfolio are merged over those given in the dialog.
+$_overps y; by default no dialog labels from the portfolio are used.
+undeferr n
+if $__sens "?" =*! $__sens "" =*! &
+  $_tmp $<1__sens
+  if $_tmp "P" =*!
+    $_overps n
+undeferr y
+
+endmonth +#cutdate
+
+$_asdtxt Select the date ranges to appear on the report
+label retry
+;DIALOG
+;ACC $_asdtxt , ADDS_TEXT , , 50
+;ACC $atd, ADDS_CHECK | ADDS_YESNO,,"&Day To Date"
+;ACC $wtd, ADDS_CHECK | ADDS_YESNO,,"&Week to Date"
+;ACC $mtd, ADDS_CHECK | ADDS_YESNO,,"&Month To Date"
+;ACC $qtd, ADDS_CHECK | ADDS_YESNO,,"&Quarter To Date"
+;ACC $ytd, ADDS_CHECK | ADDS_YESNO,,"&Year To Date"
+;ACC $l1y, ADDS_CHECK | ADDS_YESNO,,"Latest &1 Year"
+;ACC $l3y, ADDS_CHECK | ADDS_YESNO,,"Latest &3 Year"
+;ACC $l5y, ADDS_CHECK | ADDS_YESNO,,"Latest &5 Year"
+;ACC $itd, ADDS_CHECK | ADDS_YESNO,,"&Inception To Date"
+;ACC $dtd, ADDS_CHECK | ADDS_YESNO,,"&Since Specified Date"
+;ACC $dtdirr, ADDS_CHECK | ADDS_YESNO,,"Since Specified Date (I&RR)"
+;ASCG_OKCAN
+;END
+
+$mtd y
+$qtd y
+$ytd y
+$l1y y
+$l3y y
+$l5y y
+$lty y
+$lfy y
+$itd y
+$atd n
+$wtd n
+$dtd n
+$dtddirr n
+
+if $_overps "y" =*
+  call Num periods
+  if #nperiods #_zero =
+    okmsg
+    .You must choose at least one date range to appear on the report.\n
+    okmsg
+    goto retry
+
+if $dtd "y" =* $dtd "Y" =* | $dtdirr "y" =* | $dtdirr "Y" =* |
+  DIALOG
+  ACC %date1, ADDS_EDIT,[CHK] T, "Specify Date", 15 20
+  ASCG_OKCAN
+  END
+  endmonth #date1
+else
+  #date1 1
+#_savdate1 #date1
+#_irrdate1 #date1
+#_twrdate1 #date1
+
+if $arg "1" =*!
+else
+  if $_graph "y" =*
+    call ~mangement mode graph dialog box
+
+if $arg "1" =*!
+  $title TWR FOR SELECTED PERIODS
+else
+  $title PORTFOLIO PERFORMANCE CROSS REFERENCE
+
+$sv_atd $atd
+$sv_wtd $wtd
+$sv_mtd $mtd
+$sv_qtd $qtd
+$sv_ytd $ytd
+$sv_l1y $l1y
+$sv_l3y $l3y
+$sv_l5y $l5y
+$sv_lty $lty
+$sv_lfy $lfy
+$sv_itd $itd
+$sv_dtd $dtd
+$sv_dtdirr $dtdirr
+
+$savbdx ?
+
+; fix up old values passed in from a macro or script
+;if $_ann "y" =*
+;  $_ann $annyr
+
+;correct coding for 4.0 version; cmurphy 4/18/13
+if $_ann "y" =*
+  $_ann o
+return
+
+;-------------------
+label j find #_date1
+;-------------------
+#_date1 #:miss;
+
+;Since specified date
+if $dtd "y" =* $dtd "Y" =* | $dtdirr "y" =* $dtdirr "Y" =* | |
+  #_date1 #_savdate1 @e
+
+;Latest 15 Year
+if $lfy "y" =* $lfy "Y" =* |
+  if $_clsmod "y" =*
+    #_perend #cutdate @E #cutdate @E 31 % - 1- @e
+    #_perbeg #_perend @E 5580- @e
+  else
+    #_perbeg #cutdate @E 5580- @e
+    #_perend #cutdate @e
+  if #_date1 @? #_perbeg #_date1 < |
+    #_date1 #_perbeg
+else
+;Latest 10 Year
+  if $lty "y" =* $lty "Y" =* |
+    if $_clsmod "y" =*
+      #_perend #cutdate @E #cutdate @E 31 % - 1- @e
+      #_perbeg #_perend @E 3720- @e
+    else
+      #_perbeg #cutdate @E 3720- @e
+      #_perend #cutdate @e
+    if #_date1 @? #_perbeg #_date1 < |
+      #_date1 #_perbeg
+  else
+;Latest 5 Year
+    if $l5y "y" =* $l5y "Y" =* |
+      if $_clsmod "y" =*
+        #_perend #cutdate @E #cutdate @E 31 % - 1- @e
+        #_perbeg #_perend @E 1860- @e
+      else
+        #_perbeg #cutdate @E 1860- @e
+        #_perend #cutdate @e
+      if #_date1 @? #_perbeg #_date1 < |
+        #_date1 #_perbeg
+    else
+;Latest 3 Year
+      if $l3y "y" =* $l3y "Y" =* |
+        if $_clsmod "y" =*
+          #_perend #cutdate @E #cutdate @E 31 % - 1- @e
+          #_perbeg #_perend @E 1116- @e
+        else
+          #_perbeg #cutdate @E 1116- @e
+          #_perend #cutdate @e
+        if #_date1 @? #_perbeg #_date1 < |
+          #_date1 #_perbeg
+      else
+;Latest 1 Year
+        if $l1y "y" =* $l1y "Y" =* |
+          if $_clsmod "y" =*
+            #$edatex #cutdate @E #cutdate @E 31 % - 1- @e
+            #_perbeg #_perend @E 372- @e
+          else
+            #_perbeg #cutdate @E 372- @e
+            #_perend #cutdate @e
+          if #_date1 @? #_perbeg #_date1 < |
+            #_date1 #_perbeg
+        else
+;Year to Date
+          if $ytd "y" =* $ytd "Y" =* |
+            #_perbeg #cutdate @E #cutdate @E 372 % - 1- @e
+            if #_date1 @? #_perbeg #_date1 < |
+              #_date1 #_perbeg
+          else
+;Quarter to Date
+            if $qtd "y" =* $qtd "Y" =* |
+              #_perbeg #cutdate @E #cutdate @E 93 % - 1- @e
+              if #_date1 @? #_perbeg #_date1 < |
+                #_date1 #_perbeg
+            else
+;Month to Date
+              if $mtd "y" =* $mtd "Y" =* |
+                #_perbeg #cutdate @E #cutdate @E 31 % - 1- @e
+                if #_date1 @? #_perbeg #_date1 < |
+                  #_date1 #_perbeg
+              else
+;Week to Date
+                if $wtd "y" =* $wtd "Y" =* |
+                  #_offset 4 -3 #cutdate@J 7% 5>= ?
+                  #_perbeg #cutdate@J #cutdate@J 7%- #_offset+ @j; get date for previous week
+                  if #_date1 @? #_perbeg #_date1 < |
+                    #_date1 #_perbeg
+                else
+;Day to Date
+                  if $atd "y" =* $atd "Y" =* |
+                    #_perbeg #cutdate @e 1- @e
+                    if #_date1 @? #_perbeg #_date1 < |
+                      #_date1 #_perbeg
+return
+
+;-------------------
+label K set headers
+;-------------------
+$bdatex b0000
+$edatex e0000
+cvt $desc0x d0$bdatex; Annualized row
+cvt $desc1x d1$bdatex;
+cvt $desc2x d2$bdatex;
+cvt $desc3x d3$bdatex;
+$savbdx ?
+#nperiods #_zero
+if $atd "y" =* $atd "Y" =* |
+  #nperiods #nperiods @+
+  #$bdatex #cutdate @e 1- @e
+  $$bdatex y; display index return
+  #$edatex #cutdate @e
+  $$edatex n; annualize from asset class start date
+  cvt $$desc0x             ;
+  #$desc0x 0;
+  cvt $$desc1x Day         ;
+  cvt $$desc2x To Date     ;
+  cvt $$desc3x Day to Date
+  call ~Hbump labels
+if $wtd "y" =* $wtd "Y" =* |
+  #nperiods #nperiods @+
+  #_offset 4 -3 #cutdate@J 7% 5>= ?
+  #$bdatex #cutdate@J #cutdate@J 7%- #_offset+ @j; get date for previous week
+  $$bdatex y; display index return
+  #$edatex #cutdate @e
+  $$edatex n; annualize from asset class start date
+  cvt $$desc0x             ;
+  #$desc0x 0;
+  cvt $$desc1x Week        ;
+  cvt $$desc2x To Date     ;
+  cvt $$desc3x Week To Date
+  call ~Hbump labels
+if $mtd "y" =* $mtd "Y" =* |
+  #nperiods #nperiods @+
+  #$bdatex #cutdate @E #cutdate @E 31 % - 1- @e
+  $$bdatex y; display index return
+  #$edatex #cutdate @e
+  $$edatex n; annualize from asset class start date
+  cvt $$desc0x             ;
+  #$desc0x 0;
+  cvt $$desc1x Month       ;
+  cvt $$desc2x To Date     ;
+  cvt $$desc3x Month To Date;
+  call ~Hbump labels
+if $qtd "y" =* $qtd "Y" =* |
+  #nperiods #nperiods @+
+  #$bdatex #cutdate @E #cutdate @E 93 % - 1- @e
+  $$bdatex y; display index return
+  #$edatex #cutdate @e
+  $$edatex n; annualize from asset class start date
+  cvt $$desc0x             ;
+  #$desc0x 0;
+  cvt $$desc1x Quarter     ;
+  cvt $$desc2x To Date     ;
+  cvt $$desc3x Quarter To Date;
+  call ~Hbump labels
+if $ytd "y" =* $ytd "Y" =* |
+  #nperiods #nperiods @+
+  #$bdatex #cutdate @E #cutdate @E 372 % - 1- @e
+  $$bdatex y; display index return
+  #$edatex #cutdate @e
+  $$edatex n; annualize from asset class start date
+  cvt $$desc0x             ;
+  #$desc0x 0;
+  cvt $$desc1x Year        ;
+  cvt $$desc2x To Date     ;
+  cvt $$desc3x Year To Date;
+  call ~Hbump labels
+if $l1y "y" =* $l1y "Y" =* |
+  if $_clsmod "y" =*
+    #$edatex #cutdate @E #cutdate @E 31 % - 1- @e
+    #$bdatex #$edatex @E 372- @e
+  else
+    #$bdatex #cutdate @E 372- @e
+    #$edatex #cutdate @e
+  $$bdatex y; display index return
+  $$edatex n; annualize from asset class start date
+  #nperiods #nperiods @+
+  cvt $$desc0x             ;
+  #$desc0x 0;
+  cvt $$desc1x Latest 1    ;
+  cvt $$desc2x Year        ;
+  cvt $$desc3x Latest 1 Year;
+  call ~Hbump labels
+if $l3y "y" =* $l3y "Y" =* |
+  if $_clsmod "y" =*
+    #$edatex #cutdate @E #cutdate @E 31 % - 1- @e
+    #$bdatex #$edatex @E 1116- @e
+  else
+    #$bdatex #cutdate @E 1116- @e
+    #$edatex #cutdate @e
+  $$bdatex y; display index return
+  $$edatex n; annualize from asset class start date
+  #nperiods #nperiods @+
+  cvt $$desc0x Annualized  ;
+  #$desc0x 0;
+  cvt $$desc1x Latest 3    ;
+  cvt $$desc2x Year        ;
+  cvt $$desc3x Latest 3 Year;
+  undeferr n
+  if $_ann "o" =*
+  undeferr y
+    cvt $$desc3x Annualized Latest 3 Year;
+  call ~Hbump labels
+if $l5y "y" =* $l5y "Y" =* |
+  if $_clsmod "y" =*
+    #$edatex #cutdate @E #cutdate @E 31 % - 1- @e
+    #$bdatex #$edatex @E 1860- @e
+  else
+    #$bdatex #cutdate @E 1860- @e
+    #$edatex #cutdate @e
+  $$bdatex y; display index return
+  $$edatex n; annualize from asset class start date
+  #nperiods #nperiods @+
+  cvt $$desc0x Annualized  ;
+  #$desc0x 0;
+  cvt $$desc1x Latest 5    ;
+  cvt $$desc2x Year        ;
+  cvt $$desc3x Latest 5 Year; 
+  undeferr n
+  if $_ann "o" =*
+  undeferr y
+    cvt $$desc3x Annualized Latest 5 Year;
+  call ~Hbump labels
+if $lty "y" =* $lty "Y" =* |
+  if $_clsmod "y" =*
+    #$edatex #cutdate @E #cutdate @E 31 % - 1- @e
+    #$bdatex #$edatex @E 3720- @e
+  else
+    #$bdatex #cutdate @E 3720- @e
+    #$edatex #cutdate @e
+  $$bdatex y; display index return
+  $$edatex n; annualize from asset class start date
+  #nperiods #nperiods @+
+  cvt $$desc0x Annualized  ;
+  #$desc0x 0;
+  cvt $$desc1x Latest 10   ;
+  cvt $$desc2x Year        ;
+  cvt $$desc3x Latest 10 Year;
+  undeferr n
+  if $_ann "o" =*
+  undeferr y
+    cvt $$desc3x Annualized Latest 10 Year;
+  call ~Hbump labels
+if $lfy "y" =* $lfy "Y" =* |
+  if $_clsmod "y" =*
+    #$edatex #cutdate @E #cutdate @E 31 % - 1- @e
+    #$bdatex #$edatex @E 5580- @e
+  else
+    #$bdatex #cutdate @E 5580- @e
+    #$edatex #cutdate @e
+  $$bdatex y; display index return
+  $$edatex n; annualize from asset class start date
+  #nperiods #nperiods @+
+  cvt $$desc0x Annualized  ;
+  #$desc0x 0;
+  cvt $$desc1x Latest 15   ;
+  cvt $$desc2x Year        ;
+  cvt $$desc3x Latest 15 Year;
+  undeferr n
+  if $_ann "o" =*
+  undeferr y
+    cvt $$desc3x Annualized Latest 15 Year;
+  call ~Hbump labels
+if $itd "y" =* $itd "Y" =* |
+  #nperiods #nperiods @+
+  #$bdatex 0
+  if $arg "1" =*!
+    $$bdatex y;
+  else
+    $$bdatex n; do not display index return
+  #$edatex #cutdate @e
+  $$edatex y; annualize from asset class start date
+  $savbdx $bdatex; save bdatex to reset inception date between clients
+  if $arg "1" =*!
+    cvt $$desc0x             ;
+    #$desc0x 1;
+    cvt $$desc3x Inception To Date;
+  else
+    cvt $$desc0x Annualized  ;
+    #$desc0x 0;
+    cvt $$desc3x Annualized Inception To Date;
+  cvt $$desc1x Inception   ;
+  cvt $$desc2x To Date     ;
+  call ~Hbump labels
+if $dtd "y" =* $dtd "Y" =* |
+  #nperiods #nperiods @+
+  #$bdatex #date1 @e
+  $$bdatex y; display index return
+  #$edatex #cutdate @e
+  $$edatex n; annualize from asset class start date
+  #_perbeg #date1
+  #_perend #cutdate
+  #$desc0x 0;
+  cvt $$desc0x             ;
+  cvt $$desc3x Since %date1;
+  call ~period
+  undeferr n
+  if $_ann "o" =* #period #_one > &  
+    cvt $$desc0x Annualized  ;
+    cvt $$desc3x Annualized Since %date1;
+  undeferr y
+  cvt $$desc1x Since       ;
+  cvt $$desc2x %date1       ;
+  call ~Hbump labels
+
+#$bdatex #:miss
+#$edatex #:miss
+$$edatex n
+$$desc0x ?
+#$desc0x #:miss
+$$desc1x ?
+$$desc2x ?
+$$desc3x ?
+
+if $dtdirr "y" =* $dtdirr "Y" =* |
+  if $arg "1" =*!
+  else
+    cvt $desc0x d0$_irrbdatex
+    cvt $desc1x d1$_irrbdatex
+    cvt $desc2x d2$_irrbdatex
+    cvt $desc3x d3$_irrbdatex
+    cvt $$desc0x            ; 
+    cvt $$desc3x IRR Since %_irrdate1;
+    #_perbeg #_irrdate1
+    #_perend #cutdate
+    call ~period
+    undeferr n
+    if $_ann "o" =* #period #_one > &  
+    undeferr y  
+      cvt $$desc0x Annualized  ;
+      cvt $$desc3x Annualized IRR Since %_irrdate1;
+    cvt $$desc1x IRR Since  ;
+    cvt $$desc2x %_irrdate1      ;
+
+#dodesc0 #_false
+undeferr n
+if $_ann "o" =*
+undeferr y 
+  #dodesc0 #_true
+#dodesc1 #_true
+#dodesc2 #_true
+#dodesc3 #_false
+
+if $dtdirr "y" =*
+  #nperiods #nperiods @+
+
+#width #_col1wid #_col2wid #nperiods* +
+if #width #_minwidth <
+  #width #_minwidth
+;format #width
+format c 198
+
+return
+
+;--------------------------------------
+label ~Hbump labels
+;--------------------------------------
+bump $bdatex
+bump $edatex
+bump $desc0x
+bump $desc1x
+bump $desc2x
+bump $desc3x
+return
+
+
+;--------------------------------------
+label F Do Graph
+;--------------------------------------
+graph $_grtype
+
+if $arg "1" =*!
+  $grph_title TWR FOR SELECTED PERIODS
+else
+  $grph_title PORTFOLIO PERFORMANCE CROSS REFERENCE
+.\2TI S$grph_title\n
+.\2FO S$_grfmt\n
+
+;ORIENTATION
+.\2OR CS\n; use series orientation (CATEGORIES & SERIES ARE SWAPPED!!)
+
+;(becomes) SERIES LABELS
+.\2CC A0\n; column address 1 (of line 'X' (DC line type assumed) )
+
+;SERIES DATA
+.\2DL LX\n;  line type 'X'
+
+$bdatex b0000
+cvt $desc3x d3$bdatex
+#_offset 2;
+#col_addr #_base #_offset - #_col2wid +
+label a loop
+if $$desc3x "?" =*!
+; (becomes) CATEGORIES (could we get this from the column header w/ something like SC?)
+  .\2SL S$$desc3x\n
+  bump $desc3x
+; SERIES DATA
+  .\2DC A#col_addr\n
+  #col_addr #col_addr #_col2wid +
+  goto a loop
+
+;Since %date1 IRR
+if $dtdirr "y" =* $dtdirr "Y" =* |
+  cvt $_desc3x d3$_irrbdatex
+  .\2SL S$$_desc3x\n
+  .\2DC A#col_addr\n
+  #col_addr #col_addr #_col2wid +
+
+;X-AXIS DESCRIPTION
+.\2CA STime Period\n; category-axis label
+;Y-AXIS DESCRIPTION
+.\2DA STWR\n;   data-axis label
+
+.\2BC MCRE\n; end graph for this cli?
+.\2MF $_grxlmf\n; xl macro file?
+.\2MN $_grxlmn\n; xl macro name?
+
+graph
+
+if $_gronly "y" =*
+  graph only
+
+return
+
+;--------------------------------------
+label ~F Do Graph
+;--------------------------------------
+graph $_grtype
+.\2TI LBCDE\n
+.\2BC MCRE\n; report data ends at start of next client
+.\2FO S$_grfmt\n
+.\2CA SPortfolio\n
+.\2CC A0\n
+.\2DL LX\n
+
+#_col #_one
+if $gtype "a" =*
+  cvt $_temp1 Day to Date;
+  #_col #_col #_one +
+else
+  if $atd "y" =*
+    #_col #_col #_one +
+  if $gtype "w" =*
+    cvt $_temp1 Week to Date;
+    #_col #_col #_one +
+  else
+    if $wtd "y" =*
+      #_col #_col #_one +
+    if $gtype "m" =*
+      cvt $_temp1 Month to Date;
+      #_col #_col #_one +
+    else
+      if $mtd "y" =*
+        #_col #_col #_one +
+      if $gtype "q" =*
+        cvt $_temp1 Quarter to Date;
+        #_col #_col #_one +
+      else
+        if $qtd "y" =*
+          #_col #_col #_one +
+        if $gtype "y" =*
+          cvt $_temp1 Year to Date;
+          #_col #_col #_one +
+        else
+          if $ytd "y" =*
+            #_col #_col #_one +
+          if $gtype "1" =*
+            cvt $_temp1 Latest 1 Year;
+            #_col #_col #_one +
+          else
+            if $l1y "y" =*
+              #_col #_col #_one +
+            if $gtype "3" =*
+              cvt $_temp1 Latest 3 Year;
+              #_col #_col #_one +  
+            else
+              if $l3y "y" =*
+                #_col #_col #_one +
+              if $gtype "5" =*
+                cvt $_temp1 Latest 5 Year;
+                #_col #_col #_one +           
+              else
+                if $l5y "y" =*
+                  #_col #_col #_one +
+                if $gtype "10" =*
+                  cvt $_temp1 Latest 10 Year;
+                  #_col #_col #_one +   
+                else
+                  if $lty "y" =*
+                    #_col #_col #_one +
+                  if $gtype "15" =*
+                    cvt $_temp1 Latest 15 Year;
+                    #_col #_col #_one +
+                  else
+                    if $lfy "y" =*
+                      #_col #_col #_one +
+                    if $gtype "i" =*
+                      cvt $_temp1 Inception to Date;
+                      #_col #_col #_one +
+                    else
+                      if $itd "y" =*
+                        #_col #_col #_one +
+                      if $gtype "s" =*
+                        cvt $_temp1 Since %date1;
+                        #_col #_col #_one +                 
+                      else
+                        if $dtd "y" =*
+                          #_col #_col #_one +
+                        if $gtype "r" =*
+                          cvt $_temp1 IRR Since %_irrdate1;
+                          #_col #_col #_one +   
+undeferr n
+if $_ann "o" =*
+undeferr y 
+  cvt $_temp1 Annualized $_temp1;
+.\2SL S$_temp1\n
+.\2DA S$_temp1\n
+#_offset 2;
+if $_showpc "y" =*
+  #_base 64
+else
+  #_base 38
+#_col #_base #_offset - #_col 1 - #_col2wid * +
+cvt $_temp1 A#_col;
+.\2DC $_temp1\n
+.\2MF $_grxlmf\n
+.\2MN $_grxlmn\n
+graph
+return
+
+;--------------------------------------
+label Missing IRR Error Messages
+;--------------------------------------
+if $$_missirr "?" =*
+  if $chkmulti "y" =*
+    undeferr n
+    if $clear_err "y" =*
+    undeferr y
+      $clear_err ?
+      return
+    else
+      $clear_err y
+      $_missirr mirr000
+      goto Missing IRR Error Messages
+  return
+
+if $chkmulti "y" =*
+; extract the date from the end of the error message
+  #skiptodate $$_missirr@$ 10-
+  substr $$_missirr #skiptodate 10 $date
+  substr $date 0 2 $mm
+  substr $date 3 2 $dd
+  substr $date 8 2 $yy
+  $date $mm$dd$yy
+; get the text within the quotes in the error message
+  #qepos $$_missirr@$ 13-
+  $find "
+  strstr $$_missirr 0 $find #qbpos
+  #qbpos #qbpos 1+
+  #len #qepos #qbpos-
+  substr $$_missirr #qbpos #len $quoted
+; fix quoted value (max three characters long)
+  $quoted $<3quoted
+; create either an fx or totport err_id label
+  $find FX
+  strstr $$_missirr 16 $find #fxpos
+  if #fxpos @?
+    cvt $err_id t$quoted$date
+  else
+    cvt $err_id f$quoted$date
+  undeferr n
+  if $clear_err "y" =*
+  undeferr y
+    $$err_id ?
+    bump $_missirr
+    goto Missing IRR Error Messages
+  undeferr n
+  if $$err_id "?" =*
+  undeferr y
+    $$err_id y
+  else
+    bump $_missirr
+    goto Missing IRR Error Messages
+
+if $_missirr "mirr000" =*
+  error
+  .*** Warning The following IRRs are missing: ***\n
+.     $$_missirr\n
+bump $_missirr
+goto Missing IRR Error Messages
+
+
+;--------------------------------------
+label H Display this Index
+;--------------------------------------
+$_twrx r0000; stores twr
+$$_twrx ??; initialize
+#_twry 0; flag to indicate that at least one period has a return.
+$bdatex b0000
+$edatex e0000
+label g Date Column Loop Begin
+
+undeferr n
+if $$bdatex "n" =*
+undeferr y
+  cvt $$_twrx $_sp;
+  goto R continue
+
+if #$bdatex #_zero =
+  if #_stdate @?
+    cvt $$_twrx $_dash;
+    goto R continue
+  else
+    #$bdatex #_stdate
+if #$bdatex #:miss = #$edatex #:miss = |
+  goto i Date Column Loop End
+
+if $_target "Blend" =@
+  ixanchor #$bdatex
+ixvalue #bval #$bdatex $_target
+ixvalue #eval #$edatex $_target
+
+#rtn #eval #bval- #bval/ 100*
+#_perbeg #$bdatex
+#_perend #$edatex
+#svdrtn #rtn
+call ~period
+if $_ann "o" =* #period #_one > &  $_ann "a" =* |
+  #rtn #rtn #_hun / #_one + #_one #period/ ^ #_one - #_hun *
+cvt $$_twrx #2rtn
+#_twry 1;
+
+label R continue
+bump $bdatex
+bump $edatex
+bump $_twrx
+$$_twrx ??;
+goto g Date Column Loop Begin
+label i Date Column Loop End
+if #_twry
+  if $_firstidx $groupx =*
+;    .\nIndex\fH
+  ixdesc $_iname $_target
+  if $arg "1" =*!
+    if #_col1wid 22 =
+      .%4cutdate~$25name~$25_iname
+    else
+      .%4cutdate~$25name~$25_iname
+  else
+;    .\n
+    if $_showpc "y" =*
+;      .$_target~
+;    .$20_iname~
+$_twrx r0000;
+label Q Print twr
+  if $$_twrx "??" =*!
+    .$~$_twrx
+    $_temptwr $$_twrx
+    bump $_twrx
+    goto Q Print twr
+  else
+    if $bans "1" =*
+      .#~2svdrtn%~4stdate
+    else
+      #svdrtn #svdrtn 100+~
+      .#~2svdrtn%~4stdate
+  if $dtdirr "y" =* $dtdirr "Y" =* |
+    .$~_sp;
+  .\fX
+return
+
+;--------------------------------------
+label w Build asset class long name array
+;--------------------------------------
+$_x $:curclass
+if $_x " " =*!
+  cvt $_n $_acnm$_x
+  $$_n $:ccname
+  goto w
+return
+
+;--------------------------------------
+label ~Copy src array to dst array
+;--------------------------------------
+undeferr n
+$_x $$_src
+undeferr y
+if $_x "" =*! $_x "?" =*! &
+  $$_dst $_x
+  bump $_src
+  bump $_dst
+  goto ~Copy
+$$_dst ?; terminate dst array
+return
+
+;-------------------
+label k initialize weighted averages
+;-------------------
+;#$_cntx stores the number of portfolios
+;$$_cntx stores whether to display the equal weighted average for the perf period
+$_cntx cnt0000
+;#$_avgx stores the sum of portfolio returns
+$_avgx avg0000
+
+if $atd "y" =* $atd "Y" =* |
+  #$_cntx #_zero
+  $$_cntx y
+  #$_avgx #_zero
+  bump $_cntx
+  bump $_avgx
+
+if $wtd "y" =* $wtd "Y" =* |
+  #$_cntx #_zero
+  $$_cntx y
+  #$_avgx #_zero
+  bump $_cntx
+  bump $_avgx
+
+if $mtd "y" =* $mtd "Y" =* |
+  #$_cntx #_zero
+  $$_cntx y
+  #$_avgx #_zero
+  bump $_cntx
+  bump $_avgx
+
+if $qtd "y" =* $qtd "Y" =* |
+  #$_cntx #_zero
+  $$_cntx y
+  #$_avgx #_zero
+  bump $_cntx
+  bump $_avgx
+
+if $ytd "y" =* $ytd "Y" =* |
+  #$_cntx #_zero
+  $$_cntx y
+  #$_avgx #_zero
+  bump $_cntx
+  bump $_avgx
+
+if $l1y "y" =* $l1y "Y" =* |
+  #$_cntx #_zero
+  $$_cntx y
+  #$_avgx #_zero
+  bump $_cntx
+  bump $_avgx
+
+if $l3y "y" =* $l3y "Y" =* |
+  #$_cntx #_zero
+  $$_cntx y
+  #$_avgx #_zero
+  bump $_cntx
+  bump $_avgx
+
+if $l5y "y" =* $l5y "Y" =* |
+  #$_cntx #_zero
+  $$_cntx y
+  #$_avgx #_zero
+  bump $_cntx
+  bump $_avgx
+
+if $lty "y" =* $lty "Y" =* |
+  #$_cntx #_zero
+  $$_cntx n
+  #$_avgx #_zero
+  bump $_cntx
+  bump $_avgx
+
+if $lfy "y" =* $lfy "Y" =* |
+  #$_cntx #_zero
+  $$_cntx n
+  #$_avgx #_zero
+  bump $_cntx
+  bump $_avgx
+
+if $itd "y" =* $itd "Y" =* |
+  #$_cntx #_zero
+  $$_cntx n
+  #$_avgx #_zero
+  bump $_cntx
+  bump $_avgx
+
+if $dtd "y" =* $dtd "Y" =* |
+  #$_cntx #_zero
+  $$_cntx y
+  #$_avgx #_zero
+  bump $_cntx
+  bump $_avgx
+
+if $dtdirr "y" =* $dtdirr "Y" =* |
+  #$_cntx #_zero
+  $$_cntx y
+  #$_avgx #_zero
+  bump $_cntx
+  bump $_avgx
+
+#$_cntx #:miss
+#$_avgx #:miss
+return
+
+;--------------------------------------
+label ~get IRR
+;--------------------------------------
+$_irrok y
+if $arg "1" =*!
+else
+  if #stdate #_savdate1 >
+    cvt $_irr $_dash
+    $_irrok n;
+    return
+$_plkids A000000
+$$_plkids ?
+#_gmval0 #_zero
+#_gmval1 #_zero
+#_gint #_zero
+#_gfee #_zero
+#_grgain #_zero
+#_grfgain #_zero
+#_gugain #_zero
+#_gufgain #_zero
+#_ggain #_zero
+#_gfgain #_zero
+#_gcbase #_zero
+#_gccbase #_zero
+#_gacbase #_zero
+#_gadd #_zero
+#_gwith #_zero
+iread sec.inf
+pread 1 #cutdate
+lread 0 $_perfsegs
+if $_pfcalc "" =*!
+  pfcalc 0
+
+;eliminate non billable securities
+load tran
+if $:bill "y" =*!
+  null this
+next tran
+null remove
+
+;calculate fee allocation totals
+rewind
+if $alloc "y" =*
+  #_totfee #_zero
+  #_totacb #_zero; total of absolute value of acb
+  sort symb
+  load type ?y*
+  if $:bysl "y" =*!
+  load tran
+  #_totacb #_totacb #::mzal0 #::ai0 #:nval2 #$_nval2 * + + @ +
+    #_totfee #_totfee #:nval3 + #:nval6 +
+  next tran
+  next type
+  #_totfee #_totfee #extfee + #extoth +
+  rewind
+
+;sort by member display order for print and calculate loop
+if $_portperf "" =*
+  if $_dosec "n" =*!
+    sort fname
+  else
+    sort tval #:plk0
+
+;walk list printing when member changes
+if $_dosec "n" =*!
+  $_plk0 :secid
+  $_plkt0 :fname
+else
+  $_plk0 :plk0
+  $_plkt0 :plkt0
+
+if $_portperf "" =*!
+  call Zero member accumulator
+
+#_plk0 #_noord
+load tran
+undeferr n
+if #$_plk0 #_plk0 =!
+undeferr y
+  if #_plk0 #_noord =!
+    tmove back
+    call h member print
+    tmove forward
+  call Zero member accumulator
+  undeferr n
+  #_plk0 #$_plk0
+  undeferr y
+;transaction calculate
+if $:bysl "y" =*
+  call ~bysl
+else
+  if $:iscash "y" =*
+    call ~cash
+  else
+    if $:iscurr "y" =*
+      call ~kurr
+next tran
+
+if #_plk0 #_noord =!
+  if $_portperf "y" =*
+    #_plk0 #_noord
+  call h member print
+
+;print portfolio total
+if $_portperf "" =*
+  call q portfolio total
+
+return
+
+;--------------------------------------
+label ~bysl
+;--------------------------------------
+#_fee #_zero
+#_rgain #:nval3
+#_rfgain #:fgain2
+#_ugain #::utgain1
+#_ufgain #::ufgain1
+#_ccbase #:nvaln
+#_feeacb #_zero
+call security common
+
+; Errors
+undeferr n
+#_pri0 #:pri0
+#_pri1 #:pri1
+undeferr y
+if #_pri0 @? #:adun #_zero=! &
+  cvt $sym pi$:rcurr$:fileo
+  list gen $sym
+  list move
+  if #_pri1 @? #:nval6 #_zero=! &
+    cvt $sym pi$:rcurr$:fileo
+    list gen $sym
+    list move
+    if $:showai "n" =*!
+      if #:adun #_zero=! #ai1 @? &
+          cvt $sym aw$:rcurr$:fileo
+          list gen $sym
+          list move
+      if #:nval6 #_zero=! #ai2 @? &
+          cvt $sym aw$:rcurr$:fileo
+          list gen $sym
+          list move
+return
+
+;--------------------------------------
+label ~cash
+;--------------------------------------
+#_fee #:nval3 #:nval6+
+#_rgain #_zero
+#_rfgain #_zero
+#_ugain #_zero
+#_ufgain #_zero
+#_ccbase #_zero
+#_feeacb #$_feeacb
+call security common
+return
+
+;--------------------------------------
+label ~kurr
+;--------------------------------------
+#_fee #:nval3 #:nval6+
+#_rfgain #:fgain2
+#_rgain #_rfgain
+#_ufgain #::ufgain1
+#_ugain #_ufgain
+#_ccbase #_zero
+#_feeacb #$_feeacb
+call security common
+return
+
+;--------------------------------------
+label security common
+;--------------------------------------
+#_ai0 #::ai0
+#_mval0 #::mzal0 #_ai0 +
+#_ai1 #::ai1
+#_mval1 #::mzal1 #_ai1 +
+#_delai #_ai1 #_ai0 -
+#_int #:nval4 #:nval5 + #_delai +
+#_tmval0 #_tmval0 #_mval0+
+#_tmval1 #_tmval1 #_mval1+
+#_tint #_tint #_int +
+#_tfee #_tfee #_fee +
+#_trgain #_trgain #_rgain +
+#_trfgain #_trfgain #_rfgain +
+#_tugain #_tugain #_ugain +
+#_tufgain #_tufgain #_ufgain +
+#_tgain #_tgain #_rgain + #_ugain + #_int +
+#_tfgain #_tfgain #_rfgain + #_ufgain +
+#_tcbase #_tcbase #:nval2 +
+#_tacbase #_tacbase #_mval0 #:nval2 #$_nval2 * + @ +
+#_tadd #_tadd #:nval0 +
+#_twith #_twith #:nval1 +
+if $acb "5" =*
+  #_tft2 #_tft2 #:nvall +
+  #_tft3 #_tft3 #:nvalm +
+  #_tft4 #_tft4 #:nvaln +
+  #_tft5 #_tft5 #:nvalo +
+else
+  #:nval2 #:nval2 #_feeacb +
+  if $:zeromv "y" =*
+    #_mval0 #::mval0
+  if $:bysl "y" =*!
+    #_tccbase #_tccbase #:nval2 #_ccbase + #_mval0 + #_ai0 + @ +
+  else
+    #_tccbase #_tccbase #:nval2 + #_ccbase + #_mval0 #_ai0 + @ +
+if $:implied "y" =*
+  $_tapprox y
+return
+
+;--------------------------------------
+label ~period
+;set #_perend and #_perbeg before calling
+;--------------------------------------
+$svstat $status
+#pryear #_perend @E 372-
+#frac #_perend @E #_perbeg @E- 372%; number of days of fractional year
+#fracyr #_perend @E #frac-; calculation date of the beginning fractional year
+endmonth #fracyr
+#whole #_perend @E #_perbeg @E - #frac- 372/; number of period in whole years
+$cal a
+endmonth #_perend
+ddiff $cal #pryear #_perend #year
+ddiff $cal #fracyr #_perend #days
+#period #days #year/
+#period #period #whole+;adds fractional period to whole year period
+$status $svstat
+return
+
+
+;--------------------------------------
+label ~errors catalog 637
+;--------------------------------------
+; load list, check for error messages
+load list
+sort symb
+load type "aw "ex "br "pi
+if $:type1 "pi" =$
+  .\n***WARNING - prices are missing for the following portfolios***\n
+  .Run portfolio appraisal reports for the beginning and ending dates to see\n
+  .which securities lack prices.  This report is inaccurate until all\n
+  .prices are available.\n
+if $:type1 "aw" =$
+  .\n*** WARNING ***\n
+  .Some of the bond market values in this report do not include accrued\n
+  .interest because of missing yields and/or maturities.  This report will\n
+  .not be accurate until the missing data is entered into the Security\n
+  .Information file.  The following portfolios are affected:\n
+if $:type1 "ex" =$
+  cvt $_errmsg ***The following portfolios have no performance history available for this report request ($_pclln0, $:rcurr, %cutdate).***;
+  .\n$_errmsg\g
+if $:type1 "br" =$
+  .\n***WARNING - transactions exist through %_prfend in\n
+  .performance history file for the following portfolios***\g
+load sec
+.$:file\n
+load tran
+next tran
+next sec
+next type
+next list
+dealloc
+return
+
+;--------------------------------------
+label Num periods
+;--------------------------------------
+#nperiods #_zero
+$gtype ?;
+if $atd "y" =* $atd "Y" =* |
+  #nperiods #nperiods @+
+  $gtype a;
+if $wtd "y" =* $wtd "Y" =* |
+  #nperiods #nperiods @+
+  $gtype w;
+if $mtd "y" =* $mtd "Y" =* |
+  #nperiods #nperiods @+
+  $gtype m;
+if $qtd "y" =* $qtd "Y" =* |
+  #nperiods #nperiods @+
+  $gtype q;
+if $ytd "y" =* $ytd "Y" =* |
+  #nperiods #nperiods @+
+  $gtype y;
+if $l1y "y" =* $l1y "Y" =* |
+  #nperiods #nperiods @+
+  $gtype 1;
+if $l3y "y" =* $l3y "Y" =* |
+  #nperiods #nperiods @+
+  $gtype 3;
+if $l5y "y" =* $l5y "Y" =* |
+  #nperiods #nperiods @+
+  $gtype 5;
+if $lty "y" =* $lty "Y" =* |
+  #nperiods #nperiods @+
+  $gtype 10;
+if $lfy "y" =* $lfy "Y" =* |
+  #nperiods #nperiods @+
+  $gtype 15;
+if $itd "y" =* $itd "Y" =* |
+  #nperiods #nperiods @+
+  $gtype i;
+if $dtd "y" =* $dtd "Y" =* |
+  #nperiods #nperiods @+
+  if $gtype "?" =*
+    $gtype s;
+if $dtdirr "y" =* $dtdirr "Y" =* |
+  #nperiods #nperiods @+
+  if $gtype "?" =*
+    $gtype r;
+return
+
+;--------------------------------------
+label ~mangement mode graph dialog box
+;--------------------------------------
+$_first y
+$_asdtxt A graph can be created based on the following categories:
+DIALOG
+ASCG_TEXT
+if $atd "y" =*
+  if $_first "y" =*
+    ACC $gtype, ADDS_RADIO, "a" , "&Day to Date" "Chart Categories" 30 12
+    $_first n
+  else
+    ACC $gtype, ADDS_RADIO, "a" , "&Day to Date"  
+if $wtd "y" =*
+  if $_first "y" =*
+    ACC $gtype, ADDS_RADIO, "w" , "&Week to Date" "Chart Categories" 30 12
+    $_first n
+  else
+    ACC $gtype, ADDS_RADIO, "w" , "&Week to Date"
+if $mtd "y" =*
+  if $_first "y" =*
+    ACC $gtype, ADDS_RADIO, "m" ,"&Month To Date" "Chart Categories" 30 11
+    $_first n
+  else
+    ACC $gtype, ADDS_RADIO, "m" ,"&Month To Date"
+if $qtd "y" =*
+  if $_first "y" =*
+    ACC $gtype, ADDS_RADIO, "q" ,"&Quarter To Date" "Chart Categories" 30 10
+    $_first n
+  else
+    ACC $gtype, ADDS_RADIO, "q" ,"&Quarter To Date"
+if $ytd "y" =*
+  if $_first "y" =*
+    ACC $gtype, ADDS_RADIO, "y" ,"&Year To Date" "Chart Categories" 30 9
+    $_first n
+  else
+    ACC $gtype, ADDS_RADIO, "y" ,"&Year To Date"
+if $l1y "y" =*
+  if $_first "y" =*
+    ACC $gtype, ADDS_RADIO, "1" ,"Latest &1 Year" "Chart Categories" 30 8
+    $_first n
+  else
+    ACC $gtype, ADDS_RADIO, "1" ,"Latest &1 Year"
+if $l3y "y" =*
+  if $_first "y" =*
+    ACC $gtype, ADDS_RADIO, "3" ,"Latest &3 Year" "Chart Categories" 30 7
+    $_first n
+  else
+    ACC $gtype, ADDS_RADIO, "3" ,"Latest &3 Year"
+if $l5y "y" =*
+  if $_first "y" =*
+    ACC $gtype, ADDS_RADIO, "5" ,"Latest &5 Year" "Chart Categories" 30 6
+    $_first n
+  else
+    ACC $gtype, ADDS_RADIO, "5" ,"Latest &5 Year"
+if $lty "y" =*
+  if $_first "y" =*
+    ACC $gtype, ADDS_RADIO, "10" , "Latest 1&0 Year" "Chart Categories" 30 5
+  else
+    ACC $gtype, ADDS_RADIO, "10" , "Latest 1&0 Year"
+if $lfy "y" =*
+  if $_first "y" =*
+    ACC $gtype, ADDS_RADIO, "15" , "&Latest 15 Year" "Chart Categories" 30 4
+  else
+    ACC $gtype, ADDS_RADIO, "15" , "&Latest 15 Year"
+if $itd "y" =*
+  if $_first "y" =*
+    ACC $gtype, ADDS_RADIO, "i" ,"&Inception To Date" "Chart Categories" 30 3
+    $_first n
+  else
+    ACC $gtype, ADDS_RADIO, "i" ,"&Inception To Date"
+if $dtd "y" =*
+  if $_first "y" =*
+    ACC $gtype, ADDS_RADIO, "s" ,"&Since Specified Date (TWR)" "Chart Categories" 30 2
+    $_first n
+  else
+    ACC $gtype, ADDS_RADIO, "s" ,"&Since Specified Date (TWR)"
+if $dtdirr "y" =*
+  if $_first "y" =*
+    ACC $gtype, ADDS_RADIO, "r" ,"Since Specified Date (I&RR)" "Chart Categories" 30 1
+    $_first n
+  else
+    ACC $gtype, ADDS_RADIO, "r" ,"Since Specified Date (I&RR)"
+ASCG_OKCAN
+END
+return
+
+;--------------------------------------
+label ~display equal weighted averages
+;--------------------------------------
+$_cntx cnt0000
+$_avgx avg0000
+.\nEQUAL WEIGHTED AVERAGES ~
+if $_showpc "y" =*
+  .~
+label ~repeat
+if #$_cntx @?! #$_avgx @?! &
+  if $$_cntx "y" =*
+    #_avg #$_avgx #$_cntx /
+    .#~2_avg
+  else
+    .~;
+  bump $_cntx
+  bump $_avgx
+  goto ~repeat
+.\n
+return
+
+;--------------------------------------
+label Zero member accumulators
+;--------------------------------------
+#_tmval0 #_zero
+#_tmval1 #_zero
+#_tint #_zero
+#_tfee #_zero
+#_trgain #_zero
+#_trfgain #_zero
+#_tugain #_zero
+#_tufgain #_zero
+#_tgain #_zero
+#_tfgain #_zero
+#_tcbase #_zero
+#_tccbase #_zero
+#_tacbase #_zero
+#_tadd #_zero
+#_twith #_zero
+return
+
+;--------------------------------------
+label Pfcalc
+;--------------------------------------
+; adjust the addition and withdrawals for flows that were in the same classsification
+$_y _pf_
+#_y #:plkid0
+if #_y @?!
+  cvt $_y $_y#_y
+; if there were no same classsification flows this label will be undefined
+undeferr n
+#_y #$_y
+undeferr y
+;.:::PF $_y #2_y\n
+if #_y @?!
+  #_tadd #_tadd #_y -
+  #_twith #_twith #_y +
+  #$_y #:miss; erase so next portfolio can't inherit value
+return
+
+;--------------------------------------
+label h member print
+;--------------------------------------
+;print line for this member
+if $_portperf "" =*
+  if #_plk0 #_noord =!
+    if $_pfcalc "" =*!
+      call Pfcalc
+call ~irr etc calcs sets #_acbval #_irrval #_fxirrv #_feeval
+if $_portperf "" =* #_plk0 #_noord =! &
+  call o add member to portfolio total
+return
+
+;--------------------------------------
+label ~irr etc calcs sets #_acbval #_irrval #_fxirrv
+;--------------------------------------
+#_gain #_tgain
+#_fgain #_tfgain
+if $alloc "y" =*
+  #_tfee #_tacbase #_totacb / #_totfee *
+else
+  if $_extfee "y" =*
+    #_tfee #_tfee #extfee + #extoth +
+if $_perffee "y" =*
+  #_gain #_tgain #_tfee +; fees are negative so add. no fgain adjustment???
+if #_gain #_zero =~
+  #_gain #_zero
+if #_fgain #_zero =~
+  #_fgain #_zero
+if $_irrcalc "y" =*
+  #_acbval #_tccbase
+else
+  #_acbval #_tcbase #$_nval2 * #_tmval0 +
+if #_acbval #_zero =~
+  #_acbval #_zero
+if #_acbval @? #_gain @? |
+  #_irrval #:miss
+else
+  if #_gain #_zero =~
+    #_irrval #_zero
+  else
+    if #_acbval #_zero < #_acbval #_zero =~ |
+      #_irrval #:nava
+    else
+      #_irrval #_gain #_acbval / #_hun *
+      #_perbeg #_irrdate1
+      #_perend #cutdate
+      call ~period
+      if $_ann "o" =* #period #_one > &  $_ann "a" =* |
+        #_irrval #_irrval #_hun / #_one + #_one #period/ ^ #_one - #_hun *
+
+;save IRR using plkid
+cvt $_y _id_#_plk0
+#$_y #_irrval
+;save id so can clear out prior to next portfolio
+$$_plkids $_y
+bump $_plkids
+$$_plkids ?
+return
+
+;--------------------------------------
+label o add member total to portfolio total
+;add to portfolio totals
+;--------------------------------------
+#_gmval0 #_gmval0 #_tmval0 +
+#_gmval1 #_gmval1 #_tmval1 +
+#_gint #_gint #_tint +
+#_gfee #_gfee #_tfee +
+#_grgain #_grgain #_trgain +
+#_grfgain #_grfgain #_trfgain +
+#_gugain #_gugain #_tugain +
+#_gufgain #_gufgain #_tufgain +
+#_ggain #_ggain #_tgain +
+#_gfgain #_gfgain #_tfgain +
+#_gcbase #_gcbase #_tcbase +
+#_gccbase #_gccbase #_tccbase +
+#_gacbase #_gacbase #_tacbase +
+#_gadd #_gadd #_tadd +
+#_gwith #_gwith #_twith +
+if $acb "5" =*
+  #_gft2 #_gft2 #_tft2 +
+  #_gft3 #_gft3 #_tft3 +
+  #_gft4 #_gft4 #_tft4 +
+  #_gft5 #_gft5 #_tft5 +
+return
+
+;--------------------------------------
+label q portfolio total
+;copy portfolio totals to member accumulators
+;--------------------------------------
+#_tmval0 #_gmval0
+#_tmval1 #_gmval1
+#_tint #_gint
+#_tfee #_gfee
+#_trgain #_grgain
+#_trfgain #_grfgain
+#_tugain #_gugain
+#_tufgain #_gufgain
+#_tgain #_ggain
+#_tfgain #_gfgain
+#_tcbase #_gcbase
+#_tccbase #_gccbase
+#_tacbase #_gacbase
+#_tadd #_gadd
+#_twith #_gwith
+if $acb "5" =*
+  #_tft2 #_gft2
+  #_tft3 #_gft3
+  #_tft4 #_gft4
+  #_tft5 #_gft5
+
+;print portfolio total
+#_plk0 #_noord
+$_extfee y
+call h member print
+$_extfee ;
+return
+
+;--------------------------------------
+label vcheck row labels for asset class
+;check if $rowX contains asset class and set $_totprt
+;--------------------------------------
+$_base $_rowbase
+undeferr n
+if $$_base "?" =*; there are no portfolio row labels, use the firmwide row labels
+undeferr y
+  $_base $_frowbase
+label D
+undeferr n
+$_x $$_base
+undeferr y
+if $_x "?" =*!
+  cvt $_n $_acnm$_x
+  undeferr n
+  $_n $$_n
+  undeferr y
+  if $_n "?" =*!; not a valid asset class so assume its an index
+    $_hasaclass y;
+  bump $_base
+  goto D
+return
+
+;--------------------------------------
+label T
+;--------------------------------------
+$_chkid ;
+$_chkmsg ;
+if #date1 #cutdate >
+  $_chkmsg Please enter a date prior to the report date.
+return
+
+trailer
+
+label h check at first of clump
+if $:ftype1 $_type1 =* $:snmb1 $_snmb1 =* $:code $_code =* &&
+  tmove back
+  if $status "y" =*!
+    return
+  if $:ftype1 $_type1 =* $:snmb1 $_snmb1 =* $:code $_code =* &&
+    $_first n
+  else
+    $_first y
+  tmove forward
+else
+  $_first n
+if $_first "y" =*!
+  screen
+  .Not at first for $_code $_snmb1\n
+  .At $:code $:snmb1\n
+  screen
+return
+
+$Header: $/APX/Trunk/APX/APXSystem/Axys/Reports/perhsum.rep  2011-10-04 13:19:23 PDT  ADVENT/astanchi $
+$Log: $/APX/Trunk/APX/APXSystem/Axys/Reports/perhsum.rep $
+; 2013-04-18 cmurphy
+; Modified report to not annualize cumulative.  Report was based on 4.0 version and client is using 3.0.  Corrected annualization to 4.0.
+; 
+; 2011-10-04 13:19:23 PDT ADVENT\astanchi
+; SCR 3326100:  Portfolio Performance Cross Reference:  Add footnote for mid
+; period close date portfolios
+; 
+; 2011-09-06 17:32:08 PDT ADVENT\astanchi
+; SCR 3325747:  Headers on perhsum.rep 'Since Specified Date' columns not
+; centered  -> fix annualized column header
+; 
+; 2011-04-06 10:46:42 PDT ADVENT\astanchi
+; SCR 3324429:  Show "?" when report end date is after stored performance
+; history
+; 
+; 2011-03-22 13:14:29 PDT ADVENT\astanchi
+; SCR 3324239:  Performance History Reports show 0 return instead of missing
+; 
+; 2011-03-15 12:24:25 PDT ADVENT\astanchi
+; 3324239  Open  Performance History Reports show 0 return instead of missing 
+; -> If asset class record not found for the reporting period than report
+; missing and not 0.
+; 
+; 2010-11-29 09:27:38 PST ADVENT\astanchi
+; SCR 3323625:  Performance history reports are missing error messages ->
+; Adjust missirr labels for 10 char year format
+; 
+; 2010-11-18 09:04:15 PST ADVENT\astanchi
+; SCR 3321847:  Remove 'PC' as an available reporting currency -> Fix error
+; message
+; 
+; 2010-08-23 08:48:03 PDT ADVENT\astanchi
+; SCR 3322591:  Performance Reports are not handling negative acb as N/A
+; values -> turn off nava in performance history reports
+; 
+; 2010-08-06 14:49:11 PDT ADVENT\astanchi
+; SCR 3307947:  Perf reports not responding to 'Annualize Returns' option
+; Setting  -> Update annualize returns parameter
+; 
+; 
+; 2010-07-16 08:42:16 PDT ADVENT\astanchi
+; SCR 3307947:  Perf reports not responding to 'Annualize Returns' option
+; Setting  -> Add AnnualizeReturns parameter
+; 
+; 2010-06-21 11:16:43 PDT ADVENT\astanchi
+; SCR 3322151:  IRR and fees can be wrong when run for a group -> Reset
+; $_extflow after printing Total row.
+; 
+; 2010-05-26 15:50:10 PDT ADVENT\astanchi
+; SCR 3321696: Dates should use 4 character year -> Increase column width to
+; accomodate 4 character year
+; 
+; 2010-05-07 13:04:06 PDT ADVENT\astanchi
+; APX SCR 3321847:  Remove 'PC' as an available reporting currency
+; 
+; 2010-04-07 16:39:22 PDT ADVENT\astanchi
+; APX SCR 3321696:  Dates should use 4 character year
+; 
+; 2010-01-27 16:37:11 PST ADVENT\astanchi
+; APX SCR 3321058:  Missing asset class returns
+; 
+; 2009-09-03 08:56:27 PDT ADVENT\astanchi
+; APX SCR 3319929:  Graphs incorrect periods in management mode
+; 
+; 2009-08-17 13:17:21 PDT ADVENT\astanchi
+; APX SCR 3319411:  Headers become misaligned with long property name
+; 
+; 2009-07-08 09:05:30 PDT ADVENT\astanchi
+; APX SCR 3319253: Inception to date numbers are wrong when run on asset class
+; 
+; 2009-07-02 08:19:57 PDT ADVENT\astanchi
+; APX SCR 3319184: Report shows '?' for firm name when firm name is not
+; defined
+; 
+; 2009-06-15 13:56:51 PDT ADVENT\astanchi
+; APX SCR 3318122: Incorrect performance numbers when created new asset class
+; 
+; 2009-05-13 10:03:21 PDT ADVENT\astanchi
+; APX SCR 3318170: Missing error message should state asset class, not
+; portfolio  
+; 
+; 
+; 2009-05-04 16:59:20 PDT ADVENT\astanchi
+; APX SCR 3318100: Restrict performance history reports to reportable
+; classifications  -> remove changes
+; 
+; 
+; 2009-05-01 17:56:16 PDT ADVENT\astanchi
+; APX SCR 3318121: Displays duplicate indices from global configuration -> Add
+; fixarray
+; 
+; 2009-04-13 16:19:09 PDT ADVENT\astanchi
+; APX SCR 3318100:  Restrict performance history reports to show updatable
+; performance classifications  
+; 
+; 
+; 2009-04-13 15:46:34 PDT ADVENT\astanchi
+; APX SCR 3318121: Displays duplicate indices from global configuration -> Add
+; fixarray
+; 
+; 2009-04-09 15:38:58 PDT ADVENT\astanchi
+; APX SCR 3317974: Errors only appear on first portfolio when running
+; management mode  
+; 
+; 
+; 2009-04-09 15:16:46 PDT ADVENT\astanchi
+; APX SCR 3318170:  Missing error message should start asset class, not
+; portfolio
+; 
+; 2009-04-09 14:11:27 PDT ADVENT\astanchi
+; APX SCR 3317844: Add portfolio code option in management mode  
+; 
+; 
+; 2009-03-05 16:19:37 PST ADVENT\astanchi
+; APX SCR 3317947: Lear year-related Error: correct date calculation for Last
+; X Year periods.
+; 
+; 2009-02-20 11:11:36 PST ADVENT\astanchi
+; APX SCR 3317844: Add portfolio code option in management mode  
+; 
+; 
+; 2009-02-17 16:24:23 PST ADVENT\astanchi
+; APX SCR #3317810: Perhsum.rep in mgmt mode does not graph  
+; 
+; 
+; 2008-11-17 12:05:42 PST ADVENT\astanchi
+; APX SCR 3316514:  Incorrect Error message when all perf filtered out   ->
+; Add error message for account with no performance history data.
+; 
+; 
+; 2008-11-03 16:42:29 PST ADVENT\astanchi
+; APX SCR 3316514:  Incorrect error message when all perf filtered out
+; 
+; 
+; 2008-09-30 14:49:11 PDT ADVENT\astanchi
+; APX SCR 3315878: Add ANNUALIZED in report header if $annyr is missing or set
+; to y, else show Annualized in column headers for applicable columns.
+; 
+; 
+; 2008-09-30 09:58:40 PDT ADVENT\astanchi
+; APX SCR 3307384: Modify period performance reporting when close date is
+; mid-month
+; 
+; 2008-09-10 15:49:06 PDT ADVENT\astanchi
+; APX SCR 3313074: Update performance history reports to include a Day to Date
+; option
+; 
+; 2008-09-10 15:15:34 PDT ADVENT\astanchi
+; APX SCR 3313152:  Shows Annualized in report header but not on column
+; headers 
+; 
+; 2008-08-12 09:11:42 PDT ADVENT\astanchi
+; APX SCR 3311849: Report should not allow a "Since" date later than report
+; date  
+; 
+; 
+; 2008-07-01 10:04:36 PDT ADVENT\astanchi
+; APX SCR 3315107: Combine perhxref.rep into perhsum.rep
+; 
+; 
+; 2008-05-22 10:41:49 PDT ADVENT\astanchi
+; APX SCR 3314917: Fix programming error in regards to usage of cvt.  
+; 
+; 
+; 2008-05-20 17:24:14 PDT ADVENT\astanchi
+; APX SCR 3314925: Some cash accounts seem to not be displayed on report  ->
+; Update report to include type comparison.
+; 
+; 2008-05-19 16:50:51 PDT ADVENT\astanchi
+; APX SCR 3314914:  Account TWR is incorrect when run with Show IRR Calc
+; 
+; 2008-05-19 16:47:07 PDT ADVENT\astanchi
+; APX SCR 3314420: Combine catalog report 637 into perhsum.rep  -> Remove $arg
+; = 1 default.
+; 
+; 2008-05-11 11:21:36 PDT ADVENT\astanchi
+; APX SCR 3314420: Combine catalog report 637 into perhsum.rep  -> If $arg =
+; 1, then run in management mode (637), else run in portfolio mode
+; (perhsum.rep)
+; 
+; 
+; 2008-04-22 15:54:18 PDT ADVENT\astanchi
+; APX SCR 3307384: If the portfolio has a mid month close date, adjust last N
+; year periods to calculate from prior month end from close date.
+; 
+; 2008-04-21 17:14:56 PDT ADVENT\astanchi
+; APX SCR 3314627: Update reports with more appropriate error messgae if the
+; only performance data that exists is a start date record.
+; 
+; 2008-04-02 11:46:12 PDT ADVENT\astanchi
+; APX SCR 3311823: Add functionality to report security-level ACBCalc and
+; IRRCalc to TWR reports
+; 
+; 2008-02-27 13:28:26 PST ADVENT\astanchi
+; APX SCR 3313548: Does not graph if reporting 2 or less performance periods 
+; -> calculating column address using calculated report width.
+; 
+; 2008-02-25 16:47:27 PST ADVENT\astanchi
+; APX SCR 3313848: Classifications that start later should show dash instead
+; of ?  -> For periods of non investment consider TWR as dash.  If a security
+; was invested for any part of the reporting period, treat any periods of
+; non-investment as a 0 return in order to produce an actual TWR number.
+; 
+; 2008-02-25 15:43:33 PST ADVENT\astanchi
+; APX SCR 3313478: If inception to date was not selected, then set #_date1
+; based on earliest period start date.
+; 
+; 2008-02-25 13:24:46 PST ADVENT\astanchi
+; APX SCR 3314078: Date is sometimes missing on report -> save cutdate,
+; restore cutdate and enddate on next portfolio. 
+; 
+; 2008-02-20 16:31:27 PST ADVENT\astanchi
+; APX SCR 3313720: When displaying SecPerf, display bond description for fixed
+; income securities and (short) descriptor for short positions.
+; 
+; 2008-02-19 15:22:04 PST ADVENT\astanchi
+; APX SCR 3314029: Row and index labels being carried over from prior
+; portfolio -> Clear out row and index labels prior to next portfolio.
+; 
+; 2008-01-30 07:46:04 PST ADVENT\astanchi
+; APX SCR 3314034: Fix undefined $row and $index errors.
+; 
+; 2008-01-11 09:07:07 PST ADVENT\astanchi
+; APX SCR 3313935: Report sometimes resets Specify Date incorrectly for group
+; runs -> reset #cutdate and #date1 on next cli
+; 
+; 2007-11-28 14:20:15 PST ADVENT\astanchi
+; APX SCR 3313704: Performance History for Selected Periods doesn't show
+; security records -> Removed type filter on get.
+; 
+; 2007-11-28 10:38:01 PST ADVENT\astanchi
+; APX SCR 3313478:  Remove $_inctp y because Rep returns a totport record for
+; each period by default ($_inctp y).  Update report to request data from
+; inception for Asset Class performance history.
+; 
+; APX SCR 3312948: Set $_addac to n for non Asset Class classification in case
+; previous portfolio turned it on
+; 
+; 2007-10-24 14:14:00 PDT ADVENT\astanchi
+; APX SCR 3313152: Update report to show Annualized in column header and not
+; report header.
+; 
+; 2007-10-23 10:31:50 PDT ADVENT\astanchi
+; APX SCR 3312998: TWR reports should report NA instead of "?" or "Missing"
+; for incalculable TWRs   ->  For negative ACB with zero gain, the IRR
+; returned (#:commis) from Rep is #:nava.  Updated reports to use returned
+; valued (#:commis) instead of hard coding the report to print ? or NA.  Note:
+; #:nava is a variation of missing and the interpretation of NA printed to the
+; report window is handled when printing to rmf.
+; 
+; 2007-10-22 14:48:04 PDT ADVENT\astanchi
+; APX SCR 3313074: Update performance history reports to include a Day to Date
+; option
+; 
+; 2007-10-22 14:30:46 PDT ADVENT\astanchi
+; APX SCR 3313049: Update standard performance history reports to perform more
+; efficiently ->Retrieve only the classification data, currency, and
+; time-frame it needs. Fix irr date range filter.
+; 
+; 2007-10-17 15:56:27 PDT ADVENT\astanchi
+; APX SCR 3313049: Update standard performance history reports to perform more
+; efficiently ->Retrieve only the classification data, currency, and
+; time-frame it needs. Fix additional issues.
+; 
+; 2007-10-16 16:04:22 PDT ADVENT\astanchi
+; APX SCR 3313049: Update standard performance history reports to perform more
+; efficiently ->
+; Retrieve only the classification data, currency, and time-frame it needs.
+; 
+; 2007-10-15 16:58:38 PDT ADVENT\astanchi
+; APX SCR 3312948: Update portfolop precedence ->If only PortPerf is being
+; shown on perhsum, retrieve PortPerf records. If PortPerf and AssetClass are
+; being shown on perhsum, retrieve AssetClass and generate PortPerf from the
+; AssetClass records.
+; 
+; 2007-09-10 12:37:10 PDT ADVENT\WIL
+; 3312506 Set $_addac to get complete asset class data.
+; 
+; 2007-08-15 10:18:36 PDT ADVENT\astanchi
+; APX SCR 3312227: dash "-" becomes zero when exporting to Excel  -> revert
+; back to short dash.  Long dash requires Unicode.
+; 
+; 2007-08-07 09:56:40 PDT ADVENT\astanchi
+; APX SCR 3312227: Add long dash to $_dash
+; APX SCR 3312445: Attributes should not appear on the report if only "-"
+; returns 
+; 
+; 2007-07-25 14:45:13 PDT ADVENT\astanchi
+; APX SCR 3312227: dash "-" becomes zero when exporting to Excel  -> replace
+; dash '-' with long dash '–'
+; 
+; 2007-07-24 09:48:54 PDT ADVENT\astanchi
+; APX 3312216  Fix graph issues, update graph title from "PERFORMANCE HISTORY
+; SUMMARY" to "TWR FOR SELECTED PERIODS", and update graph x-axis from "Dates"
+; to "Time Period".
+; 
+; 2007-07-03 12:11:38 PDT ADVENT\astanchi
+; APX SCR 3311948 Update report to read portfolio when reporting currency is set to portfolio currency. Moved load cli above phcomp because currency must be available prior to phcomp.
+; 
+; 2007-07-02 15:11:18 PDT ADVENT\WIL
+; 
+; 
+; 2007-06-26 10:55:21 PDT ADVENT\astanchi
+; APX SCR 331849 Add check to Since Specified Date Dialog Box to insure that the date entered is prior to the report date.
+;
+;       6/14/07 10:31a Wil
+; 3311761 When not PortPerf: add classification name to title, widen first column to 40 and add a header,
+; put Total Portfolio after members and add a section header for index lines.
+; Require that the user choose at least one date range when using only the dialog labels.
+; Skip the portfolio if there are no date ranges selected for it.
+; 
+; 29    5/07/07 2:41p Wil
+; 3311447 For each period, allow incomplete data for non totport and
+; print - when no data.
+; 
+; 28    11/24/06 9:10a Wil
+; 3309852 Do not include the irr for the record on bdatex.
+; 
+; 27    11/14/06 10:54a Wil
+; 3309706 Fix title typo.
+; 
+; 26    11/10/06 11:47a Wil
+; 3309706 Rewrote most of the report to generalize it for any perf class.
+; 
+; 25    7/05/06 11:46a Jvarughe
+; APX #3308618 : Inconsistent annualization calculations --> cleaned up
+; splitting of reporting period in two using #fracyr and #whole in
+; various ann cases.
+; 
+; 23    12/12/05 12:33p Wil
+; 3304433 Replace file names with user friendly text in messages.
+; 
+; 22    3/03/05 5:28p Mc
+; SCR 3303719: Changed dates to calculation dates as necessary using @E.
+; Corrected calculations on all dates not just the latest 1 year and 5
+; year returns.
+; 
+; 21    11/03/04 2:54p Lcwong
+; Axys #3301665 : Change all reports so $firm does not look for <none>
+; -- Changed checking of $firm from "<none>" to "?".
+; -- Changed 229 reports (including one report in the XML folder).
+;
+; 20    6/02/03 6:55p Caric
+; Axys SCR #3021446:  In macros, rep creates incorrect rmf when one or
+; more prf/pbf missing-->move 'graph only' statement in 663.rep and
+; perhsum.rep.
+;
+; 19    5/13/03 11:16a Jvarughe
+; Axys #3018230 : Perf displays IRR of 2.99 yrs when run for a 3 yr
+; period when the last yr is a leap yr  --> split reporting period in two
+; using #fracyr and #whole.
+;
+; 18    4/03/03 4:22p Nvashist
+; Axys 3021172 : Make sure the reports show short name, not artifical
+; name, on the report output --> changed $:file to $:fileo
+;
+; 17    4/01/03 1:09p Jvarughe
+; Axys #3021070 : [Kinexus] Make perhsum.rep a one-date report --> Made
+; the report one date and added $dtd for checkbox that will ask user for
+; a specified date to now replace the old Since #date1 functionality.
+;
+; 16    11/18/02 5:15p Nvashist
+; Axys #3020009 : [Kinexus]Add date range labels in performance setting
+; when running perhsum.rep --> Used $__sens -an internal label that rep
+; uses to store the settings from the setting dialog until the user OKs
+; that main dialog. If the first letter is P then override was checked.
+; The label will not be defined unless the user visited the settings
+; dialog and ok'd it or unless atleast one setting is enabled. If it's
+; not defined, then note that override is checked by default.
+;
+;
+; 15    10/16/02 6:22p Caric
+; Axys SCR# 3016365 Make the "Net of Fees"/"Gross of Fees" header
+; optional-->change to 9 standard: mval, perclass, perdisp, perf,
+; perhist, perhistc, perhsum, phsect, pwperchk and 20 catalog reports:
+; 625, 626, 628, 631, 632, 633, 634, 635, 637, 638, 639, 640, 650, 651,
+; 652, 653, 660, 661, 662, 663.
+;
+; 14    10/09/02 11:30a Caric
+; BREU SCR #3018421 Performance History reports are giving error messages
+; if price file doesn't exist-->add new statement 'ddexempt' to 28
+; standard and 47 catalog reports
+;
+; 13    6/26/02 6:26p Wil
+; 3019544 Undo prior change.
+;
+; 10    6/11/01 9:38a Wil
+; 3017334 Add cshelp with context sensitive help id.
+;
+; 9     4/30/01 8:48p Cml
+; Axys #3017285 : Retest of 3016962  -->  typed title lines C.
+;
+; 8     4/30/01 8:32p Cml
+; Check In from R34 to R2 to cover the following mrs:
+;
+; allocsum      3016916
+;       3016911
+;       3016834    <-------->   3016835
+;       3016818    <-------->   3016819
+;       3016763    <-------->   3016748
+;
+; coverpg                       3016870 **
+;
+; perhsum       3016979
+;       3016978
+;       3016885
+;                       3016962 **
+;
+; tophold       3016917
+;
+; ** will be logged for 3.5.1 b1 as #3017284 and #3017285
+;
+; 10    2/06/01 1:58p Cml
+; Axys #3016979 : PERHSUM: Not graphing asset class.  -->  the report is
+; now typing each line as \fX.
+;
+; 9     2/06/01 1:38p Cml
+; Axys #3016978 : PERHSUM: Hot keys missing on second dialog box.  -->
+; added hot keys.
+;
+; 8     1/18/01 1:21p Cml
+; Axys #3016885 : PERHSUM: TWR numbers for asset classes are incorrect.
+; -->  set $_target right before call of second label G.
+;
+; 6     11/27/00 1:43p Cml
+; Axys #3016647 : Perhsum & 635 reports formatting off w/ long asset
+; class filename  --> now the report wraps description.
+;
+; 5     11/15/00 3:38p Cml
+; Axys #3016614 : PERF: ? showing instead of N/A with negative ACB  --> a
+; side effect of #3016521.  now the report uses $svstat to save and reset
+; $status before and after ddiff and the calculations for annualization
+; periods.
+;
+; 4     11/15/00 3:35p Kxk
+; Axys SCR #:   3016588   [Sample cmac] (perhsum.rep) Report not using
+; $rowX labels in port. settings --> Added capabilities for report to
+; check the $rowX labels for asset classes, and treat them as such.
+; Prior, it would treat them all as indexes.  This report is modeled
+; after the 663.
+;
+; 3     10/31/00 5:05p Cml
+; Axys #3016521 : Change annualization to use actual calendar  --> used
+; ddiff and $cal set to a to find out the actual number of days in the
+; period and in the year for annualization.
+;
+; 2     10/23/00 2:39p Cml
+; Axys #3016479 : COMPOUND: Make reports used for sample compound
+; reporting single page reports  --> incorporated 'frame onepage'.
+;
+; 1     10/20/00 1:23p Kxk
+; Axys SCR #:   3016140   [Sample compound macro]  Create Performance
+; History Summary  (perhsum.rep) --> Initial check in
