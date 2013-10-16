@@ -1,0 +1,4116 @@
+; DEFAULTS SECTION -- To change settings for a particular interface, redefine
+;                     any or all of these labels under the INTERFACE SECTION
+call initialize
+fxmap n
+
+cvt $title Interface
+$title1 ?
+$title3 (as of Trade Date)
+$title4 ?
+$gnm name
+$_cust cact
+$_lta A
+$_ltb B
+$_ltc C
+$_ltd D
+$_lte E
+$_ltf F
+$_ltg G
+$_lth H
+$_lti I
+$_ltj J
+$_ltk K
+$_ltl L
+$_ltm M
+$_ltn N
+$_lto O
+$_ltp P
+$_ltq Q
+$_ltr R
+$_lts S
+$find .;
+#_finaltg #_zero
+$srecon recon
+$pos pos
+$cli cli
+$posf posf
+
+; Note, show the Advent Cost field when running the exceptions only report.
+; It provides additional information that may be helpful in diagnosing the
+; exception.
+
+cvt $_asdtxt This report compares positions in APX to those downloaded from your Interface
+cvt $_asdtxt1 Partner, and independently calculates positions from APX portfolios.
+
+if $_prmpmv "n" =*; for interfaces that don't prompt for mv reconciliation
+  call A - with cost, no mv
+else;; for interfaces that prompt for mv reconciliation
+  call B - with cost & mv
+
+if $_dotaxlot "y" =*
+  cvt $title2 Taxlot Reconciliation
+else
+  cvt $title2 Position Reconciliation
+
+call Interface specific
+
+comma n
+undeferr n
+if $arg "x" =*
+  $dot .
+  if $outfile "" =* $outfile "?" =* |
+    $outfile temp;
+  strstr $outfile 0 $dot #dot_at
+  if #dot_at 0 >=
+    substr $outfile 0 #dot_at $outfile
+  $xml .xml
+  $outfile $outfile$xml
+  $_frstopn y; first time open the file
+
+;  get xml custom labels from firmwide - SHOULD not be defined at portfolio level.
+  $_svudefx udef0
+label xml output labels
+  if $$_svudefx "?" =*! $$_svudefx "" =*! &
+    call X get userdefined labels
+    bump $_svudefx
+    goto xml output labels
+  $$_svudefx ?;
+undeferr y
+comma y
+
+if $arg "t" =*! $arg "p" =*! & $arg "d" =*! & $arg "m" =*! &
+  $_aiarg n; no argument passed for accrued interest
+  if $_excai "y" =*
+    $showai n
+    $tdai ?
+    $pmai ?
+else
+  $_excai n; accrued interest arguments override Exclude Accrued Interest checkbox
+  $_aiarg y; argument passed for accrued interest
+dosens
+
+if $_option "a" =*
+  $_same n
+  $_prtnames n
+if $_option "b" =*
+  $_same n
+  $_prtnames y
+if $_option "c" =*
+  $_same y
+  $_prtnames y
+
+;; Initialize lot location exclusion labels from firmwide settings
+undeferr n
+$exlocx exloc0
+label exclude loop
+if $$exlocx "?" =*!
+  cvt $_fexlocx _f$$exlocx
+  #$_fexlocx 1
+  $$exlocx ?; initialize $exlocX to ?
+  if $exlocx "exloc9" =*
+    $exlocx exloc10
+    goto exclude loop
+  else
+    if $exlocx "exloc99" =*!
+      bump $exlocx
+      goto exclude loop
+undeferr y
+
+;; Initialize MBS labels
+undeferr n
+$recstyx recsty0
+label loop
+if $$recstyx "?" =*! $recstyx "recsty:" =*! &
+  #$$recstyx 0
+  bump $recstyx
+  goto loop
+undeferr y
+
+gauge 2
+fxmap n
+fxrc $fx
+
+$_settle $settle
+if $_frcesd "y" =* $_settle "n" =*! |
+  $title3 (as of Settlement Date)
+  settle u
+else
+  settle n
+$_mbsonsd y
+management
+endmonth #cutdate
+cutdate #cutdate
+#_date0 #cutdate
+sum #cutdate
+pair #cutdate
+sublot y
+#reconto #:miss
+#unrecto #:miss
+
+; Ignore differences < 1/2 display unit for market values and cost
+; however, when #recprec or #cprec are defined, we use <= to compare w/ #__minmv #__mincv
+undeferr n
+if $pennies "y" =*
+undeferr y
+  #_minmv .01
+  #_mincv .01
+else
+  #_minmv .5
+  #_mincv .5
+
+#_svqprec #minqty
+#_svmprec #minqty
+#_svrprec #_minmv
+#_svcprec #_mincv
+
+#_sycprec #:miss
+#_syrprec #:miss
+; save firmwide/netwide settings
+undeferr n
+if #qprec @?!
+  #_svqprec #qprec
+if #mbsprec @?!
+  #_svmprec #mbsprec
+if #recprec @?!
+  #_svrprec #recprec
+  #_syrprec #recprec
+if #cprec @?!
+  #_svcprec #cprec
+  #_sycprec #cprec
+undeferr y
+
+#qprec #:miss
+#mbsprec #:miss
+#cprec #:miss
+#recprec #:miss
+
+; Figure format parameters
+if $shwsym "y" =*
+  #_width 65
+else
+  #_width 80
+if $_dotaxlot "y" =*
+  #_width #_width 24 +
+if $_domv "y" =*
+  #_width #_width 48+
+if $_docv "y" =*
+  #_width #_width 48+
+else
+  if $_same "n" =*
+    #_width #_width 16+
+
+format d #_width
+if #_width 133 <=
+  format c #_width
+if #_width 105 <=
+  format b #_width
+if #_width  80 <=
+  format a #_width
+
+if $arg "j" =*
+  cvt $date As of %cutdate
+else
+  cvt $date %2cutdate
+
+if $title1 "?" =*
+  $coltitle $title
+else
+  $coltitle $title1
+head
+.$^title\n
+.$^title2\n
+.$^title3\n
+if $title4 "?" =*!
+  .$^title4\n
+.$^date\n\n
+.Reporting Currency: $fx\n\n\n\n
+if $_dotaxlot "y" =*
+  if $shwsym "y" =*
+    .                $^14coltitle    Advent  $^18coltitle    Advent           +/-        ;
+  else
+    .                             $^14coltitle    Advent  $^18coltitle    Advent           +/-        ;
+else
+  if $shwsym "y" =*
+    .                $^18coltitle    Advent           +/-        ;
+  else
+    .                             $^18coltitle    Advent           +/-        ;
+if $_same "n" =* $_docv "n" =* &
+  .      Advent    ;
+if $_domv "y" =*
+  .$^18coltitle    Advent           +/-        ;
+if $_docv "y" =*
+  .$^18coltitle    Advent           +/-        ;
+.\n
+if $_dotaxlot "y" =*
+  if $shwsym "y" =*
+    .    Security        Cost Date    Cost Date   Quantity        Quantity       Difference    ;
+  else
+    .          Security               Cost Date    Cost Date   Quantity        Quantity       Difference    ;
+else
+  if $shwsym "y" =*
+    .    Security        Quantity        Quantity       Difference    ;
+  else
+    .          Security               Quantity        Quantity       Difference    ;
+if $_same "n" =* $_docv "n" =* &
+  .       Cost     ;
+if $_domv "y" =*
+  .   Market Value    Market Value     Difference  ;
+if $_docv "y" =*
+  .      Cost            Cost          Difference  ;
+.\n
+if $_dotaxlot "y" =*
+  if $shwsym "y" =*
+    .----------------  ----------  ----------  --------------  --------------  --------------
+  else
+    .-----------------------------  ----------  ----------  --------------  --------------  --------------
+else
+  if $shwsym "y" =*
+    .----------------  --------------  --------------  --------------
+  else
+    .-----------------------------  --------------  --------------  --------------
+if $_same "n" =* $_docv "n" =* &
+  .  --------------
+if $_domv "y" =*
+  .  --------------  --------------  --------------
+if $_docv "y" =*
+  .  --------------  --------------  --------------
+.\n\n
+if $_dotaxlot "y" =*
+  if $shwsym "y" =*
+    ~csusxx12xxxxxxxx ~m/dd/ccyy  ~m/dd/ccyy  999,000,999,00~ 999,000,999,00~ 999,000,999,00~ 999,000,999,00~ 999,000,999,00~ 999,000,999,00~ 999,000,999,00~
+  else
+    ~csusxx25xxxxxxxxxxxxxxxxxxxxx ~m/dd/ccyy  ~m/dd/ccyy  999,000,999,00~ 999,000,999,00~ 999,000,999,00~ 999,000,999,00~ 999,000,999,00~ 999,000,999,00~ 999,000,999,00~
+else
+  if $shwsym "y" =*
+    ~csusxx12xxxxxxxx 999,000,999,00~ 999,000,999,00~ 999,000,999,00~ 999,000,999,00~ 999,000,999,00~ 999,000,999,00~ 999,000,999,00~
+  else
+    ~csusxx25xxxxxxxxxxxxxxxxxxxxx 999,000,999,00~ 999,000,999,00~ 999,000,999,00~ 999,000,999,00~ 999,000,999,00~ 999,000,999,00~ 999,000,999,00~
+head
+
+
+; initialize portfolio counts
+#unrecprt 0
+#totport 0
+#recport 0
+tax u
+
+if $showai "n" =*
+  $pmai n
+
+if $_useun "y" =*
+  $dbmsk ?u*
+else
+  $dbmsk ;
+
+$_showai $showai
+$_tdai $tdai
+$_pmai $pmai
+
+#tintcash 0
+#tadvcash 0
+#tdifcash 0
+
+load cli ?y* $dbmsk
+iread sec.inf
+if $_domv "y" =*
+  pread 0 #cutdate
+undeferr n
+if $consgrp "?" =* $consgrp "" =* |!
+undeferr y
+  goto ~i next client
+
+$_psum y; print reconciled in the summary
+
+if $_excai "y" =*
+  $showai n
+  $tdai ?
+  $pmai ?
+  dosens
+
+;use tolerance labels, if they exist in portfolio settings else use firmwide settings
+if #qprec @?
+  #qprec #_svqprec
+if #mbsprec @?
+  #mbsprec #_svmprec
+
+if #cprec @?!
+  #_mincv #cprec
+else
+  #_mincv #_svcprec
+if #recprec @?!
+  #_minmv #recprec
+else
+  #_minmv #_svrprec
+
+;use lot location exclusions, if they exist in portfolio settings else use firmwide
+$_pexloc n
+undeferr n
+$exlocx exloc0
+label ~exclude loop
+if $$exlocx "?" =*!
+  $_pexloc y
+  cvt $_pexlocx _p$$exlocx
+  #$_pexlocx 1
+  if $exlocx "exloc9" =*
+    $exlocx exloc10
+    goto ~exclude loop
+  else
+    if $exlocx "exloc99" =*!
+      bump $exlocx
+      goto ~exclude loop
+undeferr y
+
+if $_aiarg "n" =*
+  $_showai $showai
+  $_tdai $tdai
+  $_pmai $pmai
+
+;Show Accrued Interest 
+if $_showai "n" =*
+  $_aimsg Do not show on reports;
+if $_showai "y" =* $_pmai "n" =* $_tdai "y" =* &&
+  $_aimsg All reports as of Trade Date AM;
+if $_showai "y" =* $_pmai "y" =* $_tdai "y" =* &&
+  $_aimsg All reports as of Trade Date PM;
+if $_showai "y" =* $_pmai "n" =* $_tdai "n" =* &&
+  $_aimsg All reports as of Settle Date AM;
+if $_showai "y" =* $_pmai "y" =* $_tdai "n" =* &&
+  $_aimsg All reports as of Settle Date PM;
+if $_showai "d" =* $_pmai "n" =* $_tdai "y" =* &&
+  $_aimsg Performance reports as of trade date AM;
+if $_showai "d" =* $_pmai "y" =* $_tdai "y" =* &&
+  $_aimsg Performance reports as of trade date PM;
+if $_showai "d" =* $_pmai "n" =* $_tdai "n" =* &&
+  $_aimsg Performance reports as of settle date AM;
+if $_showai "d" =* $_pmai "y" =* $_tdai "n" =* &&
+  $_aimsg Performance reports as of settle date PM;
+
+$ptsymb b00000;$$ptsymb store $:symb1, #$ptsymb store different amount
+if $_tdai $tdai =*!
+  $_mbsonsd n
+  #_savcut #cutdate
+;  #cutdate #cutdate 372 + @e
+  cutdate #cutdate
+  oneside y
+  settle n
+  sum #one
+  pair #_zero
+  lump #one
+  sublot n
+  get * *
+  iread sec.inf
+  load tran
+  if $:code "pa" =* $:code "sa" =* |
+    if $_tdai "y" =*
+      if #:sdate #_savcut >
+        $$ptsymb $:symb2
+        if $:code "pa" =*
+          #$ptsymb #:bucks
+        else
+          #$ptsymb #_zero #:bucks -
+;        screen
+;        .$$ptsymb %:sdate #8$ptsymb\n
+;        screen
+        bump $ptsymb
+    else
+      if #:sdate #_savcut >
+        $$ptsymb $:symb2
+        if $:code "pa" =*
+          #$ptsymb #_zero #:bucks -
+        else
+          #$ptsymb #:bucks
+        bump $ptsymb
+  next tran
+  $_mbsonsd y
+$$ptsymb ?;
+
+oneside n
+if $_frcesd "y" =* $_settle "n" =*! |
+  settle u
+else
+  settle n
+lump #_zero
+sum #cutdate
+pair #cutdate
+sublot y
+cutdate #cutdate
+#_date0 #cutdate
+
+get * ?y* $dbmsk
+
+$showai $_showai
+$tdai $_tdai
+$pmai $_pmai
+dosens
+
+; initialize $_recon flag which is "y" if all trades in portfolio reconciled
+; and "n" otherwise
+$_recon y
+
+; Initialize $_noposfile flag - set to 'y' if pos file is missing (not just empty)
+$_noposfile n
+
+; Initialize $_nocli flag - used to flag portfolios with empty cli files.
+$_nocli y
+
+; Initialize $_nopos flag - used to flag portfolios with empty pos files.
+$_nopos y
+
+if #unrecto @?;  Portfolio does not have %reconto or %unrecto labels
+  $_hadrec y;   it is a reconciled client file
+else
+  $_hadrec n
+
+; Load global cash exclusion labels
+; Identified in company-wide by $reout00 - $reout99, must be sequential i.e.
+; start at 00 and no gaps in sequence.  Need to do for each portfolio 'cause
+; we clear list at end of each portfolio. We don't make any promises about
+; report behavior if these labels are defined at the portfolio level.
+
+$_xcash reout00
+label a
+undeferr n
+if $$_xcash "?" =*! ; It's defined. Put on list with flag saying this is an excluded cash account.
+undeferr y
+  $_reoutflg y
+  $_symb $_ca$:scurrg$$_xcash; All type "ca" since that's only thing that user can use in src/dest
+  list gen $_symb
+  $:code dp
+  #:bucks #_zero
+  list sum
+  list write
+  $:sval0 $:fx1$:snmb1; used for sorting
+  $:sval1 x; Our exclude cash account flag.
+  $:sval2 x; used for combining security types with same sec symbol
+  $:sval3 x; used for writing to the xml file
+  #:nval0 #_zero; init iface units
+  #:nval1 #_zero; init iface mval
+  #:nval2 #_zero; init iface cost
+  #:nval3 #_zero; init cli units
+  #:nval4 #_zero; init cli mval
+  #:nval5 #_zero; init cli cost
+  list write
+  bump $_xcash
+  goto a
+
+iread sec.inf
+if $_domv "y" =*
+  pread 0 #cutdate
+
+;sum cli file positions
+undeferr n
+#_difmv #_zero
+
+$tdai $_tdai
+$showai $_showai
+$pmai $_pmai
+dosens
+
+load tran
+$loc zero
+if #:loc @?!
+  comma n
+  if $_pexloc "y" =*
+    cvt $loc _p#:loc
+  else
+    cvt $loc _f#:loc
+  comma y
+if #$loc 1 =!
+  $_nocli n
+  #_nval3 #::tcost0
+  #_nval4 #:face
+  $_sval4 n;
+  if $:xsec "M" =*
+    if #:face @? $curface "n" =* &
+      $_sval4 y; missing original face
+  if #::mval0 @?
+    #_nval5 #:miss
+  else
+    #_nval5 #::mval0 #::ai0 +~
+  call ~AAA set cost in #_nval3, qty in #_nval4 and mv in #_nval5
+  if $_dotaxlot "y" =*!
+    list sum
+  else
+    list move
+  list write
+  $:sval0 $:fx1$:snmb1; used for sorting
+  if $_dotaxlot "y" =*
+    if $_reoutflg "y" =*; reout labes are defined
+      $_findsym $:symb1
+      call global cash exclusion labels
+      if $_excflg "y" =*
+        $:sval1 x
+      else
+        $:sval1 ;
+  if $:sval1 "x" =*!
+    if $:iscash "y" =* $:iscurr "y" =* | $:tradable "y" =*! & $_reoutflg "n" =* &
+      $:sval1 x; exclude non tradable cash
+    else
+      $:sval1 ;
+  $:sval2 x; used for combining security types with same sec symbol
+  $:sval3 x; used for writing to the xml file
+  $:sval4 $_sval4; cli file: y = missing origface, n = not missing origface
+  $:sval5 n; for mv on pos file
+  $:sval6 n; for cost on pos file
+  $:sval7 c; mark as c: cli file holdings p: pos file holdings
+  #:nval0 #_zero; init iface units
+  #:nval1 #_zero; init iface mval
+  #:nval2 #_zero; init iface cost
+  if #:nval3 @?
+    #:nval3 #_zero
+  #:nval3 #:nval3 #_nval3+~; save lot cost
+  if #:nval4 @?
+    #:nval4 #_zero
+  #:nval4 #:nval4 #_nval4+; saves lot quantity
+  #:nval5 #_nval5 #:nval5+~; save lot mval
+  #:nval6 #:miss; init iface cost date
+;  screen
+;  .$:symb1  #8:nval3  #8:nval4  #8:nval5\n
+;  screen
+  list write
+next tran
+undeferr y
+
+if $_igntrd "y" =*; ignore trade dates in pos file, therefore load all trans
+  %cuttemp 12319999; end of time
+  sum #cuttemp
+  pair #cuttemp
+  sublot y
+  cutdate #cuttemp
+else
+  sum #cutdate
+  pair #cutdate
+  sublot y
+  cutdate #cutdate
+#_date0 #cutdate
+
+if $_dotaxlot "y" =*!
+; set tax to ignore orig cost so that bucks equal mval for li trans in
+; positions
+  tax i
+else
+  tax s
+$_name $name; Save label from .cli file.
+$_cfile $:fileo
+
+cvt $file $_cfile$_ext;  ***** POS FILE *****
+split n;; don't adjust for splits since some IP's .pos records have date '010150'
+settle n;; never use settlement date field in IP's .pos file, so turn-off here
+;; this is cuz pos lumps lots and therefore loses individual settle date
+;; info.
+
+; Get file once to get market value (stored in #:bucks in pos file)
+if $_useun "y" =*
+  get $file ?y* ?u*; load all billable and unsupervised assets
+else
+  get $file ?y*; load all billable assets only
+
+;;This should never be executed in APX now that there are always position objects
+;;associated with a portfolio.
+if $status "n" =*
+  $_noposfile y
+  if $_nocli "y" =*
+;   If cli file has no transactions and pos file is missing, portfolio should
+;   be marked as as recon'd, so as not to have a false unreconciled count.
+    goto z next cli; no CLI positions and no POS file
+  $_recon n
+  $_psum n
+  else
+    $_pflag y
+    goto z next cli; CLI positions and no POS file
+
+iread sec.inf
+
+$tdai $_tdai
+$showai $_showai
+$pmai $_pmai
+dosens
+
+if $_domv "y" =*
+  pread 0 #cutdate
+$name $_name; Make sure we use .cli file label.
+
+;Save pos file positions in nval0, nval1 fields
+undeferr n
+load tran
+$_nopos n
+if $:isbysl "y" =* ; non cash
+  if $:xsec "M" =*
+    if #:face 0 = #:face @? |  $curface "n" =* &
+; If original face is missing and MBS Face is set to Original face, show ?
+; Original face is zero if original face is missing
+      #_nval0 #:miss
+    else
+      #_nval0 #:face
+      if #_nval0 @?
+        #_nval0 #_zero
+  else
+    #_nval0 #:face
+    if #_nval0 @?
+      #_nval0 #_zero
+  #:adun #_zero
+else
+  if $:iscurr "y" =*
+    #_nval0 #:adun
+  else
+    #_nval0 #:bucks
+  if #_nval0 @?
+    #_nval0 #_zero
+#_nval1 #:bucks
+#:bucks #_zero
+; zero'd #:adun, #:bucks so don't sum to values already in list.
+if $_dotaxlot "y" =*!
+  list sum
+else
+  if $:iscash "y" =*
+    #_ocost #:bucks
+    #_odate #_zero
+  else
+    if $:iscurr "y" =*
+      if #:nval4 @?
+        #_ocost #:bucks
+      else
+        #_ocost #:nval4
+      #_odate #_zero
+    else
+      #_ocost #:nval4; save pos original cost
+      #_odate #:nval2; save pos original cost date
+  call ~BBB set #_nval0 and #_nval1 in list and set $_found
+  if $_found "n" =*!
+    goto ~tskip
+  list move
+list write
+$:sval0 $:fx1$:snmb1; used for sorting
+if $_dotaxlot "y" =*
+  if $_reoutflg "y" =*; reout labes are defined
+    $_findsym $:symb1
+    call global cash exclusion labels
+    if $_excflg "y" =*
+      $:sval1 x
+    else
+      $:sval1 ; 
+if $:sval1 "x" =*!
+  if $:iscash "y" =* $:iscurr "y" =* | $:tradable "y" =*! & $_reoutflg "n" =* &
+    $:sval1 x; exclude non tradable cash
+  else
+    $:sval1 ;
+$:sval2 x; used for combining security types with same sec symbol
+if #:nval0 @?
+  #:nval0 #_zero
+if #:nval1 @?
+  #:nval1 #_zero
+#:nval0 #:nval0 #_nval0+
+#:nval1 #:nval1 #_nval1+~
+if $_dotaxlot "y" =*
+  #:date #:miss; set cli file cost date to missing
+  if #:nval2 @?
+    #:nval2 #_zero
+  #:nval2 #:nval2 #_ocost +; show missing original cost when reconciling by taxlot
+  #:nval6 #_odate; original cost date
+  $:sval5 y; for mv on pos file
+  $:sval6 n; for cost on pos file
+  $:sval7 p; mark as c: cli file holdings p: pos file holdings
+list write
+undeferr n
+label ~tskip
+next tran
+undeferr y
+
+if $_docv "y" =* $_nopos "n" =* &
+  dealloc
+  if $_dotaxlot "y" =*!
+    tax u; Set tax 'u' to put cost info in #:bucks and get the file again
+  else
+    tax s; Set tax 's' so iface units (nval0) is the same as above for matching
+
+  if $_useun "y" =*;  ***** POS File *****
+    get $file ?y* ?u*; load all billable and unsupervised assets
+  else
+    get $file ?y*; load all billable assets only
+  iread sec.inf
+  $tdai $_tdai
+  $showai $_showai
+  $pmai $_pmai
+  dosens
+  if $status "n" =*
+    $_recon n
+    $_psum n
+    .The custodial position "$file" does not exist.\n
+    .Will skip to next portfolio.\n
+    goto z next cli
+  $name $_name; Make sure we use .cli file label.
+  undeferr n
+  load tran
+  if $_dotaxlot "y" =*; tax s: original cost
+    if $:iscash "y" =*
+      #_bucks #:bucks
+    else
+      if $:iscurr "y" =*
+        if #:nval4 @?
+          #_bucks #:bucks
+        else
+          #_bucks #:nval4
+      else
+        #_bucks #:nval4
+  else
+    #_bucks #:bucks; tax u; orginal cost or cost
+  $_nopos n
+  if $:isbysl "y" =*; non cash
+    if $:xsec "M" =*
+      if #:face 0 = #:face @? |  $curface "n" =* &
+; If original face is missing and MBS Face is set to Original face, show ?
+; Original face is zero if original face is missing
+        #_nval0 #:miss
+      else
+        #_nval0 #:face
+        if #_nval0 @?
+          #_nval0 #_zero
+    else
+      #_nval0 #:face
+      if #_nval0 @?
+        #_nval0 #_zero
+    #:adun #_zero
+  else
+    if $:iscurr "y" =*
+      #_nval0 #:adun
+    else
+      #_nval0 #_bucks
+    if #_nval0 @?
+      #_nval0 #_zero
+  #:bucks #_zero
+; zero'd #:adun, #:bucks so don't sum to values already in list.
+  if $_dotaxlot "y" =*
+    if $:iscash "y" =* $:iscurr "y" =* |
+      #_odate #_zero
+    else
+      #_odate #:nval2; save pos original cost date
+    call ~FFF set #_nval2 in list and set $_found
+    if $_found "n" =*!
+      goto ~uskip
+    else
+      call ~GGG check for duplicate POS lot on list
+      if $_found "n" =*!
+        goto ~uskip
+    list move
+  else
+    list sum
+  list write
+  $:sval0 $:fx1$:snmb1; used for sorting
+  if $_dotaxlot "y" =*
+    if $_reoutflg "y" =*; reout labes are defined
+      $_findsym $:symb1
+      call global cash exclusion labels
+      if $_excflg "y" =*
+        $:sval1 x
+      else
+        $:sval1 ; 
+  if $:sval1 "x" =*!
+    if $:iscash "y" =* $:iscurr "y" =* | $:tradable "y" =*! & $_reoutflg "n" =* &
+      $:sval1 x; exclude non tradable cash
+    else
+      $:sval1 ;
+  $:sval2 x; used for combining security types with same sec symbol
+  if #:nval2 @?
+    #:nval2 #_zero
+  if $_dotaxlot "y" =*
+    $:sval5 n; for mv on pos file
+    $:sval6 y; for cost on pos file
+    $:sval7 p; mark as c: cli file holdings p: pos file holdings
+    #:date #:miss; set cli file cost date to missing
+    #:nval6 #_odate; save original cost date
+    #:nval2 #:nval2 #_bucks +; show missing original cost when reconciling by taxlot
+  else
+    #:nval2 #:nval2 #_bucks +~
+  list write
+label ~uskip
+  next tran
+  undeferr y
+
+;Scenario: POS positions but no CLI psostions: Error message and Unreconciled
+if $_nocli "y" =* $_nopos "n" =* &
+  $_recon n
+  $_psum n
+  if $_useun "y" =*
+    .\nPortfolio $file has no portfolio positions as of the report date (%cutdate).\n
+    .You must reconcile again for this portfolio using the correct date.\n
+  else
+    .\nPortfolio $file has no supervised portfolio positions as of the report date (%cutdate).\n
+  .Will skip to next portfolio.\n
+  goto z next cli; POS positions but no CLI psostions
+
+;Scenario: CLI positions but no POS positions: Error message and Unreconciled
+if $_nocli "n" =* $_nopos "y" =* &
+  $_recon n
+  $_psum n
+  if $_useun "y" =*
+    .\nPosition $file has no custodial positions as of the report date (%cutdate).\n
+    .You must reconcile again for this portfolio using the correct date.\n
+  else
+    .\nPosition $file has no supervised custodial positions as of the report date (%cutdate).\n
+  .Will skip to next portfolio.\n
+  goto z next cli; CLI positions but no POS positions
+
+;Scenario: no CLI positions and no POS positions: no error message and Reconciled
+if $_nocli "y" =* $_nopos "y" =* &
+  goto z next cli; no CLI positions and no POS positions
+
+label Print
+#_tcost 0 ;  Total cost.
+#_tdifmv 0 ; Total difference in market value.
+#_tdifcv 0 ; Total difference in cost value.
+#_tintmv 0 ; Total interface market Value
+#_tadvmv 0 ; Total advent market value
+#_tintcv 0 ; Total interface cost
+#_tadvcv 0 ; Total advent cost
+
+; Added to overcome a limitation in which supervised & unsupervised variations of a security are treated as seperate securities.
+; If the user has asked to reconcile a portfolio based only on the symbol & no sec type - the report needs to
+; ignore the type & see the collective value for all records on the list which have the same symbol as the entered one.
+; if the total is reconciled for all such records then it should be marked as reconciled.
+; Potential Risk : may combine totally different kinds of securities which are not supervised & unsupervised variations of the same security.
+
+if $_dosec "n" =*! $_igntyp "y" =* | $_dotaxlot "n" =* &
+  call Combine securities with same symbol & different security types
+
+if $_sumcash "y" =*
+  call b Combine securities with different symbol but same cash type
+
+load list
+iread sec.inf
+rewind
+sort symb
+
+call ~check to print label $unrecon
+
+$_didprt n
+$_typprt n
+
+if $_useun "y" =*
+  load type ?y* ?u* ; this is needed to get rid of temporary client & none acct.
+else
+  load type ?y* ; this is needed to get rid of temporary client & none acct.
+
+#_tycost 0 ;  Type Total cost.
+#_tydifmv 0 ; Type Total difference in market value.
+#_tydifcv 0 ; Type Total difference in cost value.
+#_tyintmv 0 ; Type Total interface market Value
+#_tyadvmv 0 ; Type Total advent market value
+#_tyintcv 0 ; Type Total interface cost
+#_tyadvcv 0 ; Type Total advent cost
+#_typrnt 0; Print if type contains a tradable cash security
+#tintcash 0
+#tadvcash 0
+#tdifcash 0
+
+load tran
+
+if $_dosec "n" =*!
+  $_fnd n;
+  $_ty inty01;
+  $_sn insn01;
+  call check if this security/type needs to be included
+  if $_fnd "n" =*
+    goto next tran
+
+if $_excsec "n" =*!
+  $_fnd n;
+  $_ty exty01;
+  $_sn exsn01;
+  call check if this security/type needs to be excluded
+  if $_fnd "y" =*
+    goto next tran
+
+if $_reoutflg "y" =*
+  undeferr n
+  $_findsym $:symb1
+  call global cash exclusion labels
+  undeferr y
+  if $_excflg "y" =*
+    goto next tran
+
+$_total y; flag to sum differences for grand total
+call find #_difun #_difcv #_difmv
+$_total n;
+
+if $arg "x" =*
+  if #_difcv #_zero =~ #_difmv #_zero =~ #_difun #_zero =~ &&
+    $:sval3 y; reconciled
+
+$_exclude n
+; finally, if cash account is to be excluded, do not print entry
+if $:iscash "y" =* $:iscurr "y" =* | $:snmb1 "*" =S & $:sval1 "x" =* &
+  $_pflag n
+  $:sval3 y; force reconciled
+  $:sval2 r; force reconciled
+  $_exclude y
+
+if $:sval2 "r" =*
+  $_recon f; forced to reconcile by ignoring secutiry type
+  $:sval3 y; force reconciled
+
+;sc
+;.$:symb1 - _pflag $_pflag ,:sval2 $:sval2, _same $_same, _psum $_psum \n
+;. _difcv #_difcv, _difmv #_difmv, _difun #_difun \n;
+;sc
+
+if $:sval2 "u" =*
+  $_psum n;
+if $_same "y" =*
+  if #_difcv #_zero =~! #_difmv #_zero =~! #_difun #_zero =~! || $:sval2 "r" =*! &
+    $_psum n;
+else
+  if $_pflag "y" =* $:sval2 "x" =* &
+    $_psum n;
+
+; Print line
+; note that although report convention is to use ~8 to print dollar amt.
+; to be sensitive to $pennies and ~9 for units to be sensitive to type.inf
+; we use ~9 always because of the possibility of #recprec overriding $pennies
+; threshold setting, and threshold difference occurring as an exception that
+; would get printed rounded to 0 if we used ~8
+;;.$:fileo $unrecon $_pflag $_didprt $_recon $_prunre\n
+undeferr n
+if $consgrp "?" =* $consgrp "" =* |!
+undeferr y
+  goto next tran
+if $_pflag "y" =* $:sval2 "x" =* & $:sval2 "u" =* $_same "y" =* $_exclude "y" =*! & ||
+  if $_didprt "n" =*; first detail line for this portfolio
+    undeferr n
+;    if $_prunre "y" =*
+    .\n$:fileo : $name\g
+    undeferr y
+    $_didprt g
+  if $arg "a" =*;  Only show positions when T. Rowe Qty > 0
+    if $:isbysl "y" =* #:nval0 #_zero = & $:isbysl "n" =* #:nval1 #_zero = & |
+      goto next tran
+  if $_typprt "n" =*;
+    .\n$:tname\g
+    uline -
+    .$uline\g
+    $_typprt y
+  if $_sumcash "y" =* $:aclass "c" =* & !
+    if $shwsym "y" =*
+      .$16:symb1
+    else
+      .$:symb1
+    if $_dotaxlot "y" =*
+      if #:nval6 @?  #:nval6 #_zero = |
+        if $:sval7 "p" =*; show missing date for unmatched pos holding
+          .~%:nval6
+        else
+          .~;
+      else
+        .~%:nval6
+      if #:date @? #:date #_zero = |
+        .~;
+      else
+        .~%:date
+  if $:iscash "n" =*;;   $:isbysl "y" =*
+    if $:iscurr "n" =*
+      .#~9:nval0 #~9:nval4 #~9_difun
+    else
+      if $_sumcash "y" =* $:aclass "c" =* & !
+        .#~8:nval0 #~8:nval4 #~8_difun
+      else
+        #tintcash #tintcash #:nval0+~
+        #tadvcash #tadvcash #:nval4+~
+        #tdifcash #tdifcash #_difun+~
+  else
+    if $_sumcash "y" =* $:aclass "c" =* & !
+      if $arg "a" =*; T. Rowe shows qty to 3 dec. places
+        .#~3:nval1 #~3:bucks #~3_difun
+      else
+        .#~8:nval1 #~8:bucks #~8_difun
+    else
+      #tintcash #tintcash #:nval1+~
+      #tadvcash #tadvcash #:bucks+~
+      #tdifcash #tdifcash #_difun+~
+  if $:iscash "y" =* $:iscurr "y" =* |
+    #_typrnt 1;
+  if $_same "n" =* $_docv "n" =* &
+    if $_sumcash "y" =* $:aclass "c" =* & !
+      .#~8:bucks
+    #_tcost #_tcost #:bucks +
+    if $:sval1 "x" =*!
+      #_tycost #_tycost #:bucks +
+  if $_domv "y" =*
+    if $_sumcash "y" =* $:aclass "c" =* & !
+      .#~8:nval1 #~8_mv #~8_difmv
+    #_tintmv #_tintmv #:nval1 +~
+    #_tadvmv #_tadvmv #_mv +~
+    if $:sval1 "x" =*!
+      #_tyintmv #_tyintmv #:nval1 +~
+      #_tyadvmv #_tyadvmv #_mv +~
+  if $_docv "y" =*
+    if $_sumcash "y" =* $:aclass "c" =* & !
+      .#~8:nval2 #~8_cv #~8_difcv
+    #_tintcv #_tintcv #:nval2 +~
+    #_tadvcv #_tadvcv #_cv +~
+    if $:sval1 "x" =*!
+      #_tyintcv #_tyintcv #:nval2 +~
+      #_tyadvcv #_tyadvcv #_cv +~
+  if $_sumcash "y" =* $:aclass "c" =* &!
+    if $_didprt "g" =*; bind line item with portfolio code / name line.
+      .\G
+      $_didprt y
+    else
+      .\n
+    if $_wdesc "y" =*
+      .$:fname1\g
+
+label next tran
+next tran
+
+$_typprt n
+if $_didprt "y" =* $_same "n" =* $_domv "y" =* $_docv "y" =* || &; If printed something and cost or mv columns showing then
+  if #_typrnt 1= $_sumcash "y" =* &
+    .~~~
+    if $_dotaxlot "y" =*
+      .~~
+    if $_same "n" =* $_docv "n" =* &
+      .     --------------~
+    if $_domv "y" =*
+      .  --------------  --------------  --------------
+    if $_domv "y" =*
+      .  --------------  --------------  --------------
+    .\fS\n
+    if $:aclass "c" =*
+      cvt $_tytotal $:ftype1 - Cash
+    else
+      cvt $_tytotal $:tname BALANCE
+    .$_tytotal 
+    if $:aclass "c" =*
+      .#~8tintcash #~8tadvcash #~8tdifcash
+    else
+      .~~~
+    if $_dotaxlot "y" =*
+      .~~
+    if $_same "n" =* $_docv "n" =* &
+      .#~8_tycost
+    if $_domv "y" =*
+      .#~8_tyintmv #~8_tyadvmv #~8_tydifmv
+    if $_docv "y" =*
+      .#~8_tyintcv #~8_tyadvcv #~8_tydifcv
+    .\fL
+    if $:aclass "c" =* $_wdesc "y" =* &
+      .Cash Account\g
+if $_useun "y" =*
+  next type
+else
+  next type
+
+if $_didprt "y" =* $_same "n" =* $_domv "y" =* $_docv "y" =* || &; If printed something and cost or mv columns showing then
+  .~~~
+  if $_dotaxlot "y" =*
+    .~~
+  if $_same "n" =* $_docv "n" =* &
+    .     --------------~
+  if $_domv "y" =*
+    .  --------------  --------------  --------------
+  if $_docv "y" =*
+    .  --------------  --------------  --------------
+  .\fS\n
+  .TOTAL~~~
+  if $_dotaxlot "y" =*
+    .~~
+  if $_same "n" =* $_docv "n" =* &
+    .#~8_tcost
+  if $_domv "y" =*
+    .#~8_tintmv #~8_tadvmv #~8_tdifmv
+  if $_docv "y" =*
+    .#~8_tintcv #~8_tadvcv #~8_tdifcv
+  .\fN
+
+next list
+
+if $arg "x" =*
+  call write to xml output
+
+load list
+dealloc; each portfolio starts with an empty list
+next list
+
+label z
+split y;; reset split sensitivity prior to reading next .cli file
+if $_frcesd "y" =* $_settle "n" =*! |
+  settle u
+else
+  settle n
+tax i
+
+;;This should never be executed in APX now that there are always position objects
+;;associated with a portfolio.
+if $_nocli "n" =* $_noposfile "y" =* &
+  .\nPortfolio $:fileo contains holdings/cash balance.  No corresponding\n
+  .custodial position was found.\n
+
+; accumulate reconciled and unreconciled ports
+;if $_recon "y" =* $_recon "f" =* |
+if $_psum "y" =*
+  #recport #recport 1 +
+  if $_prtnames "y" =*
+    .\n***** $:fileo - <$name> reconciled *****;
+    $_tmp ;
+    if $_igty "y" =*
+      .\n
+      cvt $_tmp $_tmp( ignores security type while reconciling )
+    .$_tmp\n
+    if $_domv "y" =* $_excai "y" =*! $_aiarg "n" =* & &; only print if reconciled portfolio is printed
+      .\nAccrued Interest: $_aimsg\n
+  undeferr n
+  if $rectrn "y" =* $_option "b" =* &
+  undeferr y
+    if $_hadrec "n" =*
+      $labname reconto
+      call ~Delte two labels
+      $labname unrecto
+      call ~Delte two labels
+else
+  #unrecprt #unrecprt 1 +
+  $$_unrecxx $:fileo
+  bump $_unrecxx
+  $$_unrecxx ?
+  $$_unrecxg $:gnum
+  bump $_unrecxg
+  $$_unrecxg ?
+  if $_prtnames "y" =*
+  undeferr n
+;    if $unrecon "?" =*!
+;      .\n***** $:fileo - <$name $unrecon> did not reconcile *****\n
+;    else
+    .\n***** $:fileo - <$name> did not reconcile *****\n
+  if $_domv "y" =* $_excai "y" =*! $_aiarg "n" =* & &
+    .\nAccrued Interest: $_aimsg\n
+  if $rectrn "y" =* $_option "b" =* &
+  undeferr y
+    if $_hadrec "y" =*
+      $labname reconto
+      #_recon #cutdate #one -
+      #labdef #_recon
+      call Written to unrecon.trn
+    $labname unrecto
+    #labdef #cutdate
+    call Written to unrecon.trn
+
+
+#totport #totport 1 +
+load list
+dealloc
+next list
+
+tax u
+sum #cutdate
+pair #cutdate
+sublot y
+cutdate #cutdate
+#_date0 #cutdate
+
+#reconto #:miss
+#unrecto #:miss
+
+#qprec #:miss
+#mbsprec #:miss
+#cprec #:miss
+#recprec #:miss
+$_igty n; flag initialized to display message that reconciliation is done by ignoring security type..
+
+;; Initialize lot location exclusion labels for next portfolio
+undeferr n
+$exlocx exloc0
+label ~Exclude loop
+if $$exlocx "?" =*!
+  cvt $_pexlocx _p$$exlocx
+  #$_pexlocx #:miss
+  $$exlocx ?
+  if $exlocx "exloc9" =*
+    $exlocx exloc10
+    goto ~Exclude loop
+  else
+    if $exlocx "exloc99" =*!
+      bump $exlocx
+      goto ~Exclude loop
+undeferr y
+
+label ~i next cli
+undeferr n
+if $_pbreak "y" =* $consgrp "?" =* $consgrp "" =* | &
+undeferr y
+  pbreak
+if #true
+  $consgrp ?
+  next cli
+
+load list
+dealloc
+next list
+
+$consgrp ?
+$_grp aaa
+
+
+load cli ?y* $dbmsk
+iread sec.inf
+pread 0 #cutdate
+
+$showai $_showai
+$tdai $_tdai
+$pmai $_pmai
+dosens
+
+;Show Accrued Interest
+undeferr n
+if $_aimsg "?" =* $_aimsg "" =* |
+undeferr y
+  if $_showai "n" =*
+    $_aimsg Do not show on reports;
+  if $_showai "y" =* $_pmai "n" =* $_tdai "y" =* &&
+    $_aimsg All reports as of Trade Date AM;
+  if $_showai "y" =* $_pmai "y" =* $_tdai "y" =* &&
+    $_aimsg All reports as of Trade Date PM;
+  if $_showai "y" =* $_pmai "n" =* $_tdai "n" =* &&
+    $_aimsg All reports as of Settle Date AM;
+  if $_showai "y" =* $_pmai "y" =* $_tdai "n" =* &&
+    $_aimsg All reports as of Settle Date PM;
+  if $_showai "d" =* $_pmai "n" =* $_tdai "y" =* &&
+    $_aimsg Performance reports as of trade date AM;
+  if $_showai "d" =* $_pmai "y" =* $_tdai "y" =* &&
+    $_aimsg Performance reports as of trade date PM;
+  if $_showai "d" =* $_pmai "n" =* $_tdai "n" =* &&
+    $_aimsg Performance reports as of settle date AM;
+  if $_showai "d" =* $_pmai "y" =* $_tdai "n" =* &&
+    $_aimsg Performance reports as of settle date PM;
+
+if $consgrp "?" =* $consgrp "" =* |
+  goto ~I next cli
+else
+label ~b
+  undeferr n
+  if $$_grp "?" =*
+  undeferr y
+    $$_grp $consgrp
+    cvt $lab $_grp$gnm
+    #$lab 1
+    cvt $$lab $$_grp : $:fileo;
+    cvt $lab $_grp$_cust
+    cvt $$lab $custact
+  else
+    if $$_grp $consgrp =*
+      cvt $lab $_grp$gnm
+      cvt $$lab $$lab, $:fileo;
+      #$lab #$lab 1+~
+    else
+      bump $_grp
+      goto ~b
+  $_numb 0000
+  cvt $labq $_grp$cli
+  undeferr n
+  if $$labq "?" =* $$labq "" =* |
+  undeferr y
+    $$labq y
+  load tran
+  if $_dosec "n" =*!
+    $_fnd n;
+    $_ty inty01;
+    $_sn insn01;
+    call check if this security/type needs to be included
+    if $_fnd "n" =*
+      goto j next tran
+  if $_excsec "n" =*!
+    $_fnd n;
+    $_ty exty01;
+    $_sn exsn01;
+    call check if this security/type needs to be excluded
+    if $_fnd "y" =*
+      goto j next tran
+  if $_reoutflg "y" =*
+    undeferr n
+    $_findsym $:symb1
+    call global cash exclusion labels
+    undeferr y
+    if $_excflg "y" =*
+      goto j next tran
+  undeferr n
+  $$labq n
+label G
+  cvt $lab $_grp$_numb
+  if $_sumcash "y" =* $:aclass "c" =* &
+    $_symb $:ftype1
+  else
+    $_symb $:symb1
+  if $$lab "?" =* $$lab "" =* |
+    $$lab $_symb
+  else
+    if $$lab $_symb =*!
+      bump $_numb
+      goto G
+  cvt $laba $lab$_lta
+  cvt $labb $lab$_ltb
+  cvt $labc $lab$_ltc
+  cvt $labd $lab$_ltd
+  cvt $labe $lab$_lte
+  cvt $labf $lab$_ltf
+  cvt $labg $lab$_ltg
+  cvt $labh $lab$_lth
+  cvt $labl $lab$_ltl
+  if #$labl @?
+    #$labl #:tgroup
+  if #_finaltg #$labl <
+    #_finaltg #$labl
+  if #$labh @?
+    #$labh #_zero
+  #$labh #$labh #::mval0 +~
+  if #$labg @?
+    #$labg #_zero
+  #$labg #$labg #::tcost+~
+  if $$laba "?" =* $$laba "" =* |
+    $$laba $:tname
+  if $$labb "?" =* $$labb "" =* |
+    $$labb $:iscash
+  if $$labc "?" =* $$labc "" =* |
+    $$labc $:iscurr
+  if $$labd "?" =* $$labd "" =* |
+    if $_sumcash "y" =* $:aclass "c" =* &
+      cvt $$labd Cash Account
+    else
+      $$labd $:fname1
+  if $:isbysl "y" =* ; non cash
+    if $:xsec "M" =*
+      if #:face 0 = #:face @? |  $curface "n" =* &
+; If original face is missing and MBS Face is set to Original face, show ?
+; Original face is zero if original face i smissing
+        #_nval0 #:miss
+      else
+        #_nval0 #:face
+        if #_nval0 @?
+          #_nval0 #_zero
+    else
+      #_nval0 #:face
+      if #_nval0 @?
+        #_nval0 #_zero
+    #:adun #_zero
+  else
+    if $:iscurr "y" =*
+      #_nval0 #:adun
+    else
+      #_nval0 #:bucks
+    if #_nval0 @?
+      #_nval0 #_zero
+  #_nval1 #:bucks
+  if $:iscash "y" =* $:iscurr "y" =* | $:tradable "y" =*! & $_reoutflg "n" =* &
+    $_sval1 x
+  else
+    $_sval1 ;
+  if #$labe @?
+    cvt $_temp #9_nval0
+    strstr $_temp 0 $find #offset
+    if #offset @?
+      #length #_zero
+    else
+      #offset #offset 1+
+      substr $_temp #offset 9 $_temp
+      #length $_temp @$
+    #$labe #length
+  if #$labf @?
+    #$labf #_zero
+  #$labf #$labf #_nval0+~
+  $_numb 0000
+  undeferr y
+label j next tran
+  next tran
+undeferr y
+  load list
+  dealloc
+  next list
+  if $_igntrd "y" =*
+    %cuttemp 12319999
+    sum #cuttemp
+    pair #cuttemp
+    sublot y
+    cutdate #cuttemp
+  else
+    sum #cutdate
+    pair #cutdate
+    sublot y
+    cutdate #cutdate
+  #_date0 #cutdate
+  $_psfile $:fileo
+  cvt $file $_psfile$_ext
+  split n
+  settle n
+  cvt $labr $_grp$posf
+  cvt $labs $_grp$pos
+  undeferr n
+  if $$labr "?" =* $$labr "" =* |
+  undeferr y
+    $$labr n
+  undeferr n
+  if $$labs "?" =* $$labs "" =* |
+  undeferr y
+    $$labs y
+
+  get $file ?y* $dbmsk
+  if $status "n" =*
+    $$labr y
+  iread sec.inf
+  pread 0 #cutdate
+  undeferr n
+  $_numb 0000
+  load tran
+  if $_dosec "n" =*!
+    $_fnd n;
+    $_ty inty01;
+    $_sn insn01;
+    call check if this security/type needs to be included
+    if $_fnd "n" =*
+      goto ~j next tran
+  if $_excsec "n" =*!
+    $_fnd n;
+    $_ty exty01;
+    $_sn exsn01;
+    call check if this security/type needs to be excluded
+    if $_fnd "y" =*
+      goto ~j next tran
+  if $_reoutflg "y" =*
+    undeferr n
+    $_findsym $:symb1
+    call global cash exclusion labels
+    undeferr y
+    if $_excflg "y" =*
+      goto ~j next tran
+  $$labs n
+label H
+  cvt $lab $_grp$_numb
+  if $_sumcash "y" =* $:aclass "c" =* &
+    $_symb $:ftype1
+  else
+    $_symb $:symb1
+  if $$lab "?" =* $$lab "" =* |
+    $$lab $_symb
+  else
+    if $$lab $_symb =*!
+      bump $_numb
+      goto H
+  cvt $laba $lab$_lta
+  cvt $labb $lab$_ltb
+  cvt $labc $lab$_ltc
+  cvt $labd $lab$_ltd
+  cvt $labe $lab$_lte
+  cvt $labf $lab$_ltf
+  cvt $labg $lab$_ltg
+  cvt $labh $lab$_lth
+  cvt $labi $lab$_lti
+  cvt $labj $lab$_ltj
+  cvt $labk $lab$_ltk
+  cvt $labl $lab$_ltl
+  if #$labl @?
+    #$labl #:tgroup
+  if #_finaltg #$labl <
+    #_finaltg #$labl
+  if #$labk @?
+    #$labk #_zero
+  #$labk #$labk #::mval0 +~
+  if #$labj @?
+    #$labj #_zero
+  #$labj #$labj #::tcost+~
+  if $$laba "?" =* $$laba "" =* |
+    $$laba $:tname
+  if $$labb "?" =* $$labb "" =* |
+    $$labb $:iscash
+  if $$labc "?" =* $$labc "" =* |
+    $$labc $:iscurr
+  if $$labd "?" =* $$labd "" =* |
+    if $_sumcash "y" =* $:aclass "c" =* &
+      cvt $$labd Cash Account
+    else
+      $$labd $:fname1
+  if $:bysl "y" =* ; non cash
+    if $:xsec "M" =*
+      if #:face 0 = #:face @? |  $curface "n" =* &
+; If original face is missing and MBS Face is set to Original face, show ?
+; Original face is zero if original face is missing
+        #_nval0 #:miss
+      else
+        #_nval0 #:face
+        if #_nval0 @?
+          #_nval0 #_zero
+    else
+      #_nval0 #:face
+      if #_nval0 @?
+        #_nval0 #_zero
+    #:adun #_zero
+  else
+    if $:iscurr "y" =*
+      #_nval0 #:adun
+    else
+      #_nval0 #:bucks
+    if #_nval0 @?
+      #_nval0 #_zero
+  #_nval1 #:bucks
+  #:bucks #_zero
+  if $:iscash "y" =* $:iscurr "y" =* | $:tradable "y" =*! & $_reoutflg "n" =* &
+    $_sval x
+  else
+    $_sval1 ;
+  if #$labe @?
+    cvt $_temp #9_nval0
+    strstr $_temp 0 $find #offset
+    if #offset @?
+      #length #_zero
+    else
+      #offset #offset 1+
+      substr $_temp #offset 9 $_temp
+      #length $_temp @$
+    #$labe #length
+  if #$labi @?
+    #$labi #_zero
+  #$labi #$labi #_nval0+~
+  $_numb 0000
+label ~j next tran
+  next tran
+  undeferr y
+
+label ~I next cli
+$consgrp ?
+$_grp aaa
+split y;; reset split sensitivity prior to reading next .cli file
+if $_frcesd "y" =* $_settle "n" =*! |
+  settle u
+else
+  settle n
+tax i
+sum #cutdate
+pair #cutdate
+sublot y
+cutdate #cutdate
+#_date0 #cutdate
+next cli
+load list
+dealloc
+next list
+
+$_grp aaa
+$_numb 0000
+
+label ~h
+undeferr n
+if $$_grp "?" =* $$_grp "" =* | !
+undeferr y
+  cvt $_temp1 $_grp$gnm
+  cvt $_temp2 $_grp$_cust
+  cvt $$_temp1 $$_temp1 - $$_temp2
+  cvt $_tem $_grp$srecon
+  $$_tem y
+label ~g
+  cvt $lab $_grp$_numb
+  undeferr n
+  if $$lab "?" =* $$lab "" =* | !
+  undeferr y
+    cvt $labb $lab$_ltb
+    cvt $labc $lab$_ltc
+    cvt $labd $lab$_ltd
+    cvt $labe $lab$_lte
+    cvt $labf $lab$_ltf
+    cvt $labg $lab$_ltg
+    cvt $labh $lab$_lth
+    cvt $labi $lab$_lti
+    cvt $labj $lab$_ltj
+    cvt $labk $lab$_ltk
+    cvt $labm $lab$_ltm
+    cvt $labn $lab$_ltn
+    cvt $labo $lab$_lto
+    cvt $labp $lab$_ltp
+    undeferr n
+    if #$labe @?
+      #$labe #_zero
+    if #$labf @?
+      #$labf #_zero
+    if #$labg @?
+      #$labg #_zero
+    if #$labh @?
+      #$labh #_zero
+    if #$labi @?
+      #$labi #_zero
+    if #$labj @?
+      #$labj #_zero
+    if #$labk @?
+      #$labk #_zero
+    undeferr y
+    $$labp y
+    #_tempa #$labi #$labf-
+    if $$labb "n" =*
+      if $$labc "n" =*
+        if #$labe 0 =
+          #$labm #0_tempa
+        else
+          if #$labe 1 =
+            #$labm #1_tempa
+          else
+            if #$labe 2 =
+              #$labm #2_tempa
+            else
+              if #$labe 3 =
+                #$labm #3_tempa
+              else
+                if #$labe 4 =
+                  #$labm #4_tempa
+                else
+                  if #$labe 5 =
+                    #$labm #5_tempa
+                  else
+                    if #$labe 6 =
+                      #$labm #6_tempa
+                    else
+                      #$labm #7_tempa
+      else
+        #$labm #8_tempa
+    else
+      if $arg "a" =*
+        #$labm #3_tempa
+      else
+        #$labm #8_tempa
+    if #$labm 0 =!
+      $$labp n
+    if $_domv "y" =*
+      #_tempa #$labk #$labh-
+      #$labn #8_tempa
+      undeferr n
+      if #$labn 0 =!
+        $$labp n
+      undeferr y
+    if $_docv "y" =*
+      #_tempa #$labj #$labg-
+      #$labo #8_tempa
+      undeferr n
+      if #$labo 0 =!
+        $$labp n
+      undeferr y
+    if $$labp "n" =*
+      $$_tem n
+    bump $_numb
+    goto ~g
+  else
+    bump $_grp
+    $_numb 0000
+    goto ~h
+;Print group accounts
+$_grp aaa
+label E
+$_numb 0000
+$_didprt n
+$_typprt ?
+#_numchk 1
+$_grpnmpt n
+#_tcost 0
+#_tintmv 0
+#_tadvmv 0
+#_tdifmv 0
+#_tintcv 0
+#_tadvcv 0
+#_tdifcv 0
+
+undeferr n
+if $$_grp "?" =* $$_grp "" =* |!
+undeferr y
+  cvt $_tem $_grp$srecon
+  cvt $_lab $_grp$gnm
+  cvt $_labq $_grp$cli
+  cvt $_labr $_grp$posf
+  cvt $_labs $_grp$pos
+  undeferr n
+  if $$_labq "y" =*
+    if $$_labr "y" =* $$_labs "y" =* |
+  undeferr y
+      #recport #recport #$_lab+~
+      #totport #totport #$_lab+~
+      if $_option "a" =*!
+        $find :;
+        strstr $$_lab 0 $find #offset
+        substr $$_lab 0 #offset $dest
+        #offset #offset 1+
+        substr $$_lab #offset 999 $dest2
+        .\n***** $dest- <$dest2 > reconciled *****\n
+      goto ~H
+    else
+      #unrecprt #unrecprt #$_lab+~
+      #totport #totport #$_lab+~
+      if $_useun "y" =*
+        .\n$$_lab has no portfolio positions as of the report date (%cutdate).\n
+        .You must reconcile again for this portfolio using the correct date.\n
+      else
+        .\n$$_lab has no supervised portfolio positions as of the report date (%cutdate).\n
+      .Will skip to next portfolio.\n
+      goto ~H
+  else
+    undeferr n
+    if $$_labs "y" =*
+    undeferr y
+      #unrecprt #unrecprt #$_lab+~
+      #totport #totport #$_lab+~
+      if $_useun "y" =*
+        .\n$$_lab has no custodial positions as of the report date (%cutdate).\n
+        .You must reconcile again for this portfolio using the correct date.\n
+      else
+        .\n$$_lab has no supervised custodial positions as of the report date (%cutdate).\n
+      .Will skip to the next portfolio.\n
+      goto ~H
+  if $$_tem "y" =*
+    #recport #recport #$_lab+~
+    #totport #totport #$_lab+~
+    if $_option "b" =*
+      cvt $_lab $_grp$gnm
+      $find :;
+      strstr $$_lab 0 $find #offset
+      substr $$_lab 0 #offset $dest
+      #offset #offset 1+
+      substr $$_lab #offset 999 $dest2
+      .\n***** $dest- <$dest2 > reconciled *****\n
+    if $_option "c" =*!
+      goto ~H
+  else
+    #totport #totport #$_lab+~
+    #unrecprt #unrecprt #$_lab+~
+  undeferr n
+  .\n$$_lab\g
+  undeferr y
+  $_didprt g
+label ~f
+  cvt $_lab $_grp$_numb
+  undeferr n
+  if $$_lab "?" =* $$_lab "" =* | !
+    cvt $_laba $_lab$_lta
+    cvt $_labb $_lab$_ltb
+    cvt $_labc $_lab$_ltc
+    cvt $_labd $_lab$_ltd
+    cvt $_labe $_lab$_lte
+    cvt $_labf $_lab$_ltf
+    cvt $_labg $_lab$_ltg
+    cvt $_labh $_lab$_lth
+    cvt $_labi $_lab$_lti
+    cvt $_labj $_lab$_ltj
+    cvt $_labk $_lab$_ltk
+    cvt $_labl $_lab$_ltl
+    cvt $_labm $_lab$_ltm
+    cvt $_labn $_lab$_ltn
+    cvt $_labo $_lab$_lto
+    cvt $_labp $_lab$_ltp
+    if #$_labl #_numchk =! $$_labp "y" =* $_option "c" =*! & |
+      bump $_numb
+      goto ~f
+    if $_typprt $$_laba =*! $_typprt "?" =* |
+      .\n$$_laba\g
+      uline -
+      .$uline\g
+      $_typprt $$_laba
+    #length $$_lab @$
+    if $_sumcash "y" =* #length 4 = &
+      .$$_lab Cash
+    else
+      if $shwsym "y" =*
+        .$16$_lab
+      else
+        .$$_lab
+    if $$_labb "n" =*
+      if $$_labc "n" =*
+        if #$_labe 0 =
+          .#~$_labi #~$_labf #~$_labm
+        else
+          if #$_labe 1 =
+            .#~1$_labi #~1$_labf #~1$_labm
+          else
+            if #$_labe 2 =
+              .#~2$_labi #~2$_labf #~2$_labm
+            else
+              if #$_labe 3 =
+                .#~3$_labi #~3$_labf #~3$_labm
+              else
+                if #$_labe 4 =
+                  .#~4$_labi #~4$_labf #~4$_labm
+                else
+                  if #$_labe 5 =
+                    .#~5$_labi #~5$_labf #~5$_labm
+                  else
+                    if #$_labe 6 =
+                      .#~6$_labi #~6$_labf #~6$_labm
+                    else
+                      .#~7$_labi #~7$_labf #~7$_labm
+      else
+        .#~8$_labi #~8$_labf #~8$_labm
+    else
+      if $arg "a" =*
+        .#~3$_labi #~3$_labf #~3$_labm
+      else
+        .#~8$_labi #~8$_labf #~8$_labm
+    if $_same "n" =* $_docv "n" =* &
+      .#~8$_labg
+      #_tcost #_tcost #$_labg+~
+    if $_domv "y" =*
+      .#~8$_labk #~8$_labh #~8$_labn
+      #_tintmv #_tintmv #$_labk+~
+      #_tadvmv #_tadvmv #$_labh+~
+      #_tdifmv #_tdifmv #$_labn+~
+    if $_docv "y" =*
+      .#~8$_labj #~8$_labg #~8$_labo
+      #_tintcv #_tintcv #$_labj +~
+      #_tadvcv #_tadvcv #$_labg +~
+      #_tdifcv #_tdifcv #$_labo +~
+    if $_didprt "g" =*
+      .\G
+      $_didprt y
+    else
+      .\n
+    if $_wdesc "y" =*
+      .$$_labd\g
+    bump $_numb
+    goto ~f
+  #_numchk #_numchk 1+
+  if #_numchk #_finaltg >
+label ~H
+    #_numchk 1
+    call J end of group line
+    bump $_grp
+    if $_pbreak "y" =*
+      pbreak
+    if #true
+      goto E
+  else
+    $_numb 0000
+    goto ~f
+
+
+
+
+
+
+if $_dotaxlot "y" =*
+  .\n\nTOTAL Reconciled Portfolios~~~~~#recport\n
+  .TOTAL Unreconciled Portfolios~~~~~#unrecprt\n
+  .TOTAL Portfolios Read~~~~~#totport\n
+else
+  .\n\nTOTAL Reconciled Portfolios~~~#recport\n
+  .TOTAL Unreconciled Portfolios~~~#unrecprt\n
+  .TOTAL Portfolios Read~~~#totport\n
+
+if $_domv "y" =* $_excai "y" =* $_aiarg "y" =* | &
+  .\nAccrued Interest: $_aimsg\n
+
+if $arg "u" =*
+  .\n\n
+  .Annuities may be out of balance due to their value changing over the\n
+  .life of the asset.  Any applicable increases/decreases must be added\n
+  .to the portfolio manually.\n
+
+if $_option "b" =*
+  call Output group
+
+if $arg "x" =*
+  outdisk $outfile ady; appends
+  .</SIPOS>\n
+  fclose
+  screen
+  .output written to $outfile\n
+  screen
+end
+
+;===============================================================================
+
+HELP
+. The following impact your report results:\n\n
+. From Dataport\n
+. - A custodial position for the date you are reconciling\n\n
+. From Price information\n
+. - Prices for the date you are reconciling (only\n
+.   if you are reconciling market values)\n\n
+. From Report settings\n
+. - The option to print pennies\n\n
+. From the Custom settings\n
+. - Path labels if you use them\n\n
+. From Security information\n
+. - Definition of all securities and cash accounts\n\n
+. From Security Type information\n
+. - Definition of decimal precision for elements compared in reconciling\n
+. - Definition of decimal precision for numbers printed\n\n
+. From Global Settings\n
+. - Definition of exact dollar amount tolerance for reconciling under \#recprec\n
+. - Definition of minimum quantity used for reconciliation under \#qprec\n
+. - Definition of \$reout00 - \$reout99 for cash accounts to exclude from reconciliation\n\n
+. Please reference APX Help or "Using APX" for\n
+. additional information.\n
+HELP
+
+; ---------------------------------------------------
+label ~GGG check for duplicate POS lot on list
+; checks pos taxlot for duplicates
+; matches on symbol, original cost date and quantity
+; set #_odate prior to calling
+; ---------------------------------------------------
+$_symb1 $:symb1
+$_iscash $:iscash
+$_iscurr $:iscurr
+$_found n;
+load list
+rewind
+load tran
+if $_symb1 $:symb1 =* $:sval6 "n" =* & $_found "n" =* &
+  if $_iscash "y" =* $_iscurr "y" =* | $_iscash "n" =* $_iscurr "n" =* & #_odate #:nval6 = & #_nval0 #:nval0 =~ & |
+    $_found y;
+    $:sval6 y; for cost on pos file
+next tran
+next list
+return
+
+; ---------------------------------------------------
+label ~FFF set #_nval2 in list and set $_found
+; matches pos taxlot to cli taxlot on symbol, original cost date and quantity
+; set #_bucks and #_odate prior to calling
+; ---------------------------------------------------
+if $_igntyp "y" =*
+  $_sym1 $:snmb1
+else
+  $_sym1 $:symb1
+$_iscash $:iscash
+$_iscurr $:iscurr
+$_found n;
+load list
+rewind
+load tran
+if $_igntyp "y" =*
+  $_sym2 $:snmb1
+else
+  $_sym2 $:symb1
+if $_sym1 $_sym2 =* $:sval6 "n" =* & $_found "n" =* &
+  if $_iscash "y" =* $_iscurr "y" =* | $_iscash "n" =* $_iscurr "n" =* & #_odate #:date = & #_nval0 #:nval4 =~ & |
+    $_found y;
+    $:sval6 y; for cost on pos file
+    if #:nval2 @?
+      #:nval2 #_zero
+    #:nval2 #:nval2 #_bucks+; show missing original cost when reconciling by taxlot
+next tran
+next list
+return
+
+; ---------------------------------------------------
+label ~BBB set #_nval0 and #_nval1 in list and set $_found
+; matches pos taxlot to cli taxlot on symbol, original cost date and quantity
+; set #_nval0, #_nval1, and #_odate prior to calling
+; ---------------------------------------------------
+if $_igntyp "y" =*
+  $_sym1 $:snmb1
+else
+  $_sym1 $:symb1
+$_iscash $:iscash
+$_iscurr $:iscurr
+$_found n;
+load list
+rewind
+load tran
+if $_igntyp "y" =*
+  $_sym2 $:snmb1
+else
+  $_sym2 $:symb1
+if $_sym1 $_sym2 =* $:sval5 "n" =* & $_found "n" =* &
+  if $_iscash "y" =* $_iscurr "y" =* | $_iscash "n" =* $_iscurr "n" =* & #_odate #:date = & #_nval0 #:nval4 =~ & |
+    $_found y;
+    $:sval5 y; for mv on pos file
+    if #:nval0 @?
+      #:nval0 #_zero
+    if #:nval1 @?
+      #:nval1 #_zero
+    #:nval0 #:nval0 #_nval0+~
+    #:nval1 #:nval1 #_nval1+~
+    #:nval6 #_odate
+next tran
+next list
+return
+
+label ~AAA set cost in #_nval3, qty in #_nval4 and mv in #_nval5
+$ptsymb b00000;$$ptsymb store $:symb1, #$ptsymb store different amount
+label ~a
+if $$ptsymb "?" =*!
+  if $$ptsymb $:symb1 =*
+    #_nval3 #_nval3 #$ptsymb -
+    #_nval4 #_nval4 #$ptsymb -
+    #_nval5 #_nval5 #$ptsymb -
+;    screen
+;    .$$ptsymb  #8_nval4  #8$ptsymb\n
+;    screen
+  bump $ptsymb
+  goto ~a
+return
+
+;--------------------------------------
+label A - with cost, no mv
+;--------------------------------------
+rsetup curface settle showai shwsym:n
+DIALOG
+ACC $_asdtxt , ADDS_TEXT, $_asdtxt1, 58
+ASCG_PORT
+ASCG_ONEDATE
+ASCG_FX
+ACC $_dosec , ADDS_CHECK | ADDS_YESNO,[SUB] V, "Reconcile specific &securities only " 30 1
+ACC $_docv, ADDS_CHECK | ADDS_YESNO, ,"Reconcile by cos&t basis"
+ACC $_wdesc, ADDS_CHECK | ADDS_YESNO, ,"&Include security description on the report"
+ACC $_option, ADDS_RADIO, "a", "Unreconciled positions only" "&List..." 50 3
+ACC $_option, ADDS_RADIO, "b", "Unreconciled positions and names of unreconciled portfolios"
+ACC $_option, ADDS_RADIO, "c", "All positions and names of unreconciled portfolios"
+ACC #_qtyprec, ADDS_RADIO, "1", "Display precision" "Reconcile quantity based on" 50 2
+ACC #_qtyprec, ADDS_RADIO, "2", "Maximum precision"
+ACC $_pbreak, ADDS_CHECK | ADDS_YESNO, ,"Page b&reak between portfolios"
+ACC $_useun , ADDS_CHECK | ADDS_YESNO , ,"Include &unsupervised assets"
+ACC $_excsec , ADDS_CHECK | ADDS_YESNO,[SUB] v, "E&xclude securities " 30 1
+ACC $_igntyp , ADDS_CHECK | ADDS_YESNO, ,"I&gnore all security types" 30 1
+ACC $_igntrd , ADDS_CHECK | ADDS_YESNO, ,"Ignore trade date in custodial positions" 30 1
+ACC $_sumcash , ADDS_CHECK | ADDS_YESNO, ,"Sum cash account balances" 30 1
+ACC $_excai , ADDS_CHECK | ADDS_YESNO, ,"Exclude accrued interest" 30 1
+;ACC $_dotaxlot , ADDS_CHECK | ADDS_YESNO, ,"Reconcile by tax lot" 30 1
+ASCG_OKCAN
+ASCG_BROWSE
+ASCG_SENS
+END
+return
+
+;--------------------------------------
+label B - with cost & mv
+;--------------------------------------
+rsetup pennies curface settle showai shwsym:n
+DIALOG
+ACC $_asdtxt , ADDS_TEXT, $_asdtxt1, 58
+ASCG_PORT
+ASCG_ONEDATE
+ASCG_FX
+ACC $_dosec , ADDS_CHECK | ADDS_YESNO,[SUB] V, "Reconcile specific &securities " 30 1
+ACC $_domv, ADDS_CHECK | ADDS_YESNO, ,"Reconcile &market values"
+ACC $_docv, ADDS_CHECK | ADDS_YESNO, ,"Reconcile by cos&t basis"
+ACC $_wdesc, ADDS_CHECK | ADDS_YESNO, ,"&Include security description on the report"
+ACC $_option, ADDS_RADIO, "a", "Unreconciled positions only"  "&List..." 50 3
+ACC $_option, ADDS_RADIO, "b", "Unreconciled positions and names of unreconciled portfolios"
+ACC $_option, ADDS_RADIO, "c", "All positions and names of unreconciled portfolios"
+ACC #_qtyprec, ADDS_RADIO, "1", "Display precision" "Reconcile quantity based on" 50 2
+ACC #_qtyprec, ADDS_RADIO, "2", "Maximum precision"
+ACC $_pbreak, ADDS_CHECK | ADDS_YESNO, ,"Page b&reak between portfolios"
+ACC $_useun , ADDS_CHECK | ADDS_YESNO , ,"Include &unsupervised assets"
+ACC $_excsec , ADDS_CHECK | ADDS_YESNO,[SUB] v, "E&xclude securities " 30 1
+ACC $_igntyp , ADDS_CHECK | ADDS_YESNO, ,"I&gnore all security types" 30 1
+ACC $_igntrd , ADDS_CHECK | ADDS_YESNO, ,"Ignore trade date in custodial positions" 30 1
+ACC $_sumcash , ADDS_CHECK | ADDS_YESNO, ,"Sum cash account balances" 30 1
+ACC $_excai , ADDS_CHECK | ADDS_YESNO, ,"Exclude accrued interest" 30 1
+;ACC $_dotaxlot , ADDS_CHECK | ADDS_YESNO, ,"Reconcile by tax lot" 30 1
+ASCG_OKCAN
+ASCG_BROWSE
+ASCG_SENS
+END
+return
+
+;--------------------------------------
+label Output group
+;--------------------------------------
+; save files to list and remove duplicates
+$_unrecxx a000000
+$_unrecxg c000000
+label output loop
+if $$_unrecxx "?" =*!
+  $portname ;
+  if $$_unrecxg "0" =*!
+    $portname +@
+  $portname $portname$$_unrecxx
+  $_type aw
+  $_type $_type$:scurrg
+  $_sym $_type$portname	
+  list gen $_sym
+  list sum
+  bump $_unrecxx
+  bump $_unrecxg
+  goto output loop
+
+; File output
+$_ufile unrecon.grp
+bfopen $_ufile
+bfrecord \$
+if $status "y" =*
+  bffield labname \$name
+  bffield slabdef Unreconciled portfolios
+  bfwrite
+
+sort symb
+load list
+load tran
+bfrecord current
+if $status "y" =*
+  $_portname $:snmb1
+  bffield portname $_portname
+bfwrite
+next tran
+next list
+fclose
+return
+
+;-----------------------------------
+label ~check to print label $unrecon
+$_prunre n
+if $_useun "y" =*
+  load type ?y* ?u* ; this is needed to get rid of temporary client & none acct.
+else
+  load type ?y* ; this is needed to get rid of temporary client & none acct.
+
+load tran
+
+undeferr n
+; Minimum Market Value
+cvt $_typapr $:ftype1$_apr
+if #$_typapr @?;   using global labels $recprec and #recprec
+  if $recprec "P" =* $recprec "p" =* |
+    #__minmv #:nval1 #_minmv*
+  else
+    #__minmv #_minmv
+else
+  if $$_typapr "P" =* $$_typapr "p" =* |
+    #__minmv #:nval1 #$_typapr *
+  else
+    #__minmv #$_typapr
+
+; Quantity
+if $:iscash "n" =*;
+  if #:nval4 @?
+    #_difun #:miss
+  else
+    #_difun #:nval0 #:nval4 -
+  if #$:ftype1 @?!
+    if $mbsprec "P" =* $mbsprec "p" =* |
+      #_minqty #mbsprec #:nval0*
+    else
+      #_minqty #mbsprec
+  else
+    cvt $_typqpr $:ftype1$_qpr
+    if #$_typqpr @?
+      if $qprec "P" =* $qprec "p" =* |
+        #_minqty #qprec #:nval0 *
+      else
+        #_minqty #qprec
+    else
+      if $$_typqpr "P" =* $$_typqpr "p" =* |
+        #_minqty #$_typqpr #:nval0*
+      else
+        #_minqty #$_typqpr
+else; cash, qty = mval
+;  #_difun #:nval1 #:bucks -
+  #_difun #:nval1 #:nval4 -
+  #_minqty #__minmv
+
+undeferr y
+
+; adjust the difun number to the correct
+; rounded number given the number of decimal places
+; that type.inf has specified BEFORE comparing to
+; tolerance value
+if #_qtyprec 1 =
+  if $:iscash "y" =* $:iscurr "y" =* | 
+    cvt $temp #81_difun
+  else
+    cvt $temp #9_difun
+else
+  cvt $temp #7_difun
+#_temp $temp@(
+#_difun #_temp
+
+; check for units difference against minqty, but  for equals
+; check, use approximation because decimal to binary conversion
+; may put spurious number at end
+if #_difun @ #_minqty <= #_difun @?! &; #_difun @ #_minqty =~ |
+  #_difun #_zero
+else
+; flag that portfolio has at least one position that did not
+; reconcile for included cash securities only
+  if $:iscash "y" =* $:iscurr "y" =* | $:snmb1 "*" =S & $:sval1 "x" =* & !
+    $_prunre y
+
+; Market value
+if $_domv "y" =*
+  if $:iscash "y" =*; only Cash
+;    #_mv #:bucks
+    #_mv #:nval5
+  else
+    #_mv #:nval5
+
+  if #_mv @?
+    #_mv #_zero
+    if #:pri0 @?
+      #_mv #:miss
+    $_prunre y
+    #_difmv #:nval1
+    cvt $tpmv #8_difmv
+    #_tpmv $tpmv @(
+    #_difmv #_tpmv
+    goto ~skipmv
+
+  #_difmv #:nval1 #_mv -
+  cvt $tpmv #8_difmv
+  #_tpmv $tpmv @(
+  #_difmv #_tpmv
+  if #_difmv @ #__minmv @ <=; #_difmv @ #__minmv =~ |; #__minmv #_difmv <= |
+    #_difmv #_zero
+  else
+; exclude reout difcsts from the total difcst for cash accounts only
+    if $:iscash "y" =* $:iscurr "y" =* | $:snmb1 "*" =S & $:sval1 "x" =* & !
+      $_prunre y
+
+label ~skipmv
+if $_docv "y" =*
+  if $:iscash "y" =*; Cash
+;    #_cv #:bucks
+    #_cv #:nval3
+  else
+    #_cv #:nval3
+
+  undeferr n
+  cvt $_typcpr $:ftype1$_cpr
+  if #$_typcpr @?;   using global labels $cprec and #cprec
+    if $cprec "P" =* $cprec "p" =* |
+      #__mincv #:nval2 #_mincv*
+    else
+      #__mincv #_mincv
+  else
+    if $$_typcpr "P" =* $$_typcpr "p" =* |
+      #__mincv #:nval2 #$_typcpr *
+    else
+      #__mincv #$_typcpr
+
+  undeferr y
+  #_difcv #:nval2 #_cv -
+  cvt $tpcv #8_difcv
+  #_tpcv $tpcv @(
+  #_difcv #_tpcv
+  if #_difcv @ #__mincv @ <=; #_difcv @ #__mincv =~ |; #__mincv #_difcv <= |
+    #_difcv #_zero
+  else
+    if $:iscash "y" =* $:iscurr "y" =* | $:snmb1 "*" =S & $:sval1 "x" =* & !
+      $_prunre y
+
+next tran
+
+if #true
+  next type
+rewind
+return
+
+label Write labels to unrecon.trn
+$fail n
+comma n
+bfopen unrecon.trn a
+bfrecord \%
+if $status "n" =*
+  $fail y
+else
+  bffield portfolio $:fileo
+  bffield labname $labname
+  bffield dlabdef #labdef
+  bfwrite
+  if $status "n" =*
+    $fail y
+
+if $fail "y" =*
+  fclose a
+  okmsg
+  .Failed while writing unrecon.trn. Quitting.\n
+  okmsg
+  end early
+  return
+
+fclose
+comma y
+return
+
+label ~Delte two labels
+$fail n
+comma n
+bfopen unrecon.trn a
+bfrecord \%\%
+if $status "n" =*
+  $fail y
+else
+  bffield portfolio $:fileo
+  bffield labname $labname
+  bfwrite
+  if $status "n" =*
+    $fail y
+
+if $fail "y" =*
+  fclose a
+  okmsg
+  .Failed while writing unrecon.trn. Quitting.\n
+  okmsg
+  end early
+  return
+
+fclose
+comma y
+return
+
+;-------------------------
+label Interface specific
+;-------------------------
+; ASSUMPTION IS THAT ONLY NCS INTERFACE WITH ABOVE PROMPTS AND
+; A SINGLE DIALOG BOX ARE USED
+; INTERFACE SECTION -- Define $title to customize this report for a particular
+;                      interface. $title is the only reference to an interface.
+;                      Max. len. supported for $title column heading is 18.
+;                      If greater, then define short name in $title1,
+;                      (e.g. S.B. Shearson)
+if $arg "a" =*
+  $_prmpmv n
+  $title T. Rowe Price
+if $arg "j" =*
+  $_prmpmv n
+  $title4 (Discrepancies Only)
+  $title Bear Stearns
+; g = Generic arg used to turn on cost reconciliation
+if $arg "g" =*
+  $_prmpcv y
+; o = Generic arg used to turn on settle date reconciliation (no prompt)
+if $arg "o" =*
+  $_frcesd y
+; s = Generic arg used to turn on settle date reconciliation (with prompt)
+if $arg "s" =*
+  $_prmpcv y
+
+; report settings
+if $arg "t" =*
+  $showai y
+  $tdai y
+  $pmai n
+
+if $arg "p" =*
+  $showai y
+  $tdai y
+  $pmai y
+
+if $arg "d" =*
+  $showai y
+  $tdai n
+  $pmai n
+
+if $arg "m" =*
+  $showai y
+  $tdai n
+  $pmai y
+
+return
+
+;-----------------
+label initialize
+;-----------------
+;Initailize dialog variables
+$_domv n
+$_docv n
+$_dotaxlot n; reconcile by taxlot or reconcile by lumped position
+$_wdesc y;;       flag that controls whether we print security desc.
+$_option a
+#_qtyprec 1; Reconcile quantity based on display precision
+$_useun n
+$_dosec n
+$_excsec n
+$_pbreak n
+$_igntyp n
+$_excai y
+
+; set constant variables
+#_zero 0
+#one 1
+#four 4
+#five 5
+#minus1 -1; used as -1
+#true 1
+
+; set cash type string
+$_ca ca
+
+; lists general default title
+
+;$curface n
+$_ext .pos
+$_same n;;        flag that controls whether we print positions that are same
+$_prmpmv y;;      flag that controls whether we prompt for mv reconciliation
+$_prmpcv n;;      flag that controls whether we prompt for cost reconciliation
+$_frcesd n;;      flag that forces settlement date, without prompting
+$_unrecxx a000000;  recursive label list used to store unreconciled portfolios
+$$_unrecxx ?;
+$_unrecxg c000000;  recursive label list used to store unreconciled portfolios gnum
+$$_unrecxg ?;
+
+;;the following labels are needed for defining custom reference labels
+
+$extybas exty; type
+$exsnbas exsn; symbol
+#_excurse #one; count of current security to be excluded
+#_exmaxse #one; count of max security to be excluded
+$_exmaxse 01;
+$_excurse 01;
+$_bn_stat n
+$exty01 ?;
+$exsn01 ?;
+
+
+$intybas inty; type
+$insnbas insn; symbol
+#_incurse #one; count of current security to be included
+#_inmaxse #one; count of max security to be included
+$_inmaxse 01;
+$_incurse 01;
+$inty01 ?;
+$insn01 ?;
+
+; Setting Tolerances for Difference Security Type
+$_cpr cpr;  Cost Basis
+$_apr apr;  Trade Amount Basis
+$_qpr qpr;  Quantity Basis
+
+$_igty n; flag initialized to display message that reconciliation is done by ignoring security type..
+
+$_reoutflg n; y indicates $reoutXX labels are defined
+return
+
+;---------------------------
+label V Include Securities
+;---------------------------
+$_bn_first y
+$_bn_last n
+label ~V Repeating Dialog
+if #_incurse #one >
+  $_bn_first n
+$_asdtxtl  Reconcile specific securities #_incurse.
+$_asdtxtl1 Enter the security type and security symbol you want to reconcile.
+$_asdtxtl2 Leave security type and symbol fields blank and click next to exit.
+cvt $_ty $intybas$_incurse
+cvt $_sn $insnbas$_incurse
+DIALOG
+ACC $_asdtxtl , ADDS_TEXT, , 60
+ACC $_asdtxtl1 , ADDS_TEXT, , 60
+ACC $$_ty , ADDS_EDIT | ADDS_TYPE | ADDS_WILD | ADDS_OPTIONAL, ,"Security type     " 12 8 HORIZ
+ACC $$_sn , ADDS_EDIT | ADDS_SYMBONLY | ADDS_WILD | ADDS_OPTIONAL, ,"Security symbol " 30 30 HORIZ
+ACC $_asdtxtl2 , ADDS_TEXT, , 60
+ASCG_BACKNEXTCAN
+END
+
+if $_bn_stat "n" =*
+  if #_incurse #one <=
+    return
+  else
+    #_incurse #_incurse #one -
+    bump - $_incurse
+    goto ~V Repeating dialog
+else
+  if $$_ty "" =*! $$_ty "?" =*! & $$_sn "" =*!  $$_sn "?" =*! & |
+    #_incurse #_incurse #one +
+    bump $_incurse
+    if #_incurse #_inmaxse >
+      #_inmaxse #_incurse
+      $_inmaxse $_incurse
+      cvt $_ty $intybas$_inmaxse
+      cvt $_sn $insnbas$_inmaxse
+      $$_ty ?;
+      $$_sn ?;
+    if #_incurse 100 <
+      goto ~V Repeating dialog
+return
+
+;---------------------------
+label v Exclude Securities
+;---------------------------
+$_bn_first y
+$_bn_last n
+label ~v Repeating Dialog
+if #_excurse #one >
+  $_bn_first n
+$_asdtxtl Exclude securities #_excurse.
+$_asdtxtl1 Enter the security type and security symbol you want to exclude.
+$_asdtxtl2 Leave security type and symbol fields blank and click next to exit.
+cvt $_ty $extybas$_excurse
+cvt $_sn $exsnbas$_excurse
+DIALOG
+ACC $_asdtxtl , ADDS_TEXT, , 60
+ACC $_asdtxtl1 , ADDS_TEXT, , 60
+ACC $$_ty , ADDS_EDIT | ADDS_TYPE | ADDS_WILD | ADDS_OPTIONAL, ,"Security type     " 12 8 HORIZ
+ACC $$_sn , ADDS_EDIT | ADDS_SYMBONLY | ADDS_WILD | ADDS_OPTIONAL, ,"Security symbol " 30 30 HORIZ
+ACC $_asdtxtl2 , ADDS_TEXT, , 60
+ASCG_BACKNEXTCAN
+END
+
+if $_bn_stat "n" =*
+  if #_excurse #one <=
+    return
+  else
+    #_excurse #_excurse #one -
+    bump - $_excurse
+    goto ~v Repeating dialog
+else
+  if $$_ty "" =*! $$_ty "?" =*! & $$_sn "" =*!  $$_sn "?" =*! & |
+    #_excurse #_excurse #one +
+    bump $_excurse
+    if #_excurse #_exmaxse >
+      #_exmaxse #_excurse
+      $_exmaxse $_excurse
+      cvt $_ty $extybas$_exmaxse
+      cvt $_sn $exsnbas$_exmaxse
+      $$_ty ?;
+      $$_sn ?;
+    if #_excurse 100 <
+      goto ~v Repeating dialog
+return
+
+;--------------------------------------------------------------
+label check if this security/type needs to be included/excluded
+;--------------------------------------------------------------
+#_cnt #one
+$_fnd n
+
+label ~loop
+if $$_ty "" =*! $$_ty "?" =*! & $$_sn "" =*! $$_sn "?" =*! & |
+  if $$_ty "" =* $$_ty "?" =* |
+    $$_ty ????;
+  if $$_sn "" =* $$_sn "?" =* |
+    $$_sn *;
+  if $:ftype1 $$_ty =S $:snmb1 $$_sn =S &
+    $_fnd y
+  else
+    bump $_ty
+    bump $_sn
+    goto ~loop
+return
+
+;-------------------------------------------------------------------
+label Combine securities with same symbol & different security types
+;-------------------------------------------------------------------
+$_lastsnm ?
+
+load list
+rewind
+sort sval
+load tran
+$_lastsnm $:fx1$:snmb1
+
+; check if the type should be ignored.
+$_ignore n;
+
+if $_igntyp "y" =*; ignore all security types
+  $_ignore y
+else
+  call ~Check if this security is set such that type should be ignored
+
+if $_ignore "n" =*  $_ignore "y" =* $:sval1 "x" =* & |
+  goto Next tran
+
+; accumulate the values from all records on the list which have this security symbol
+#_tmdifun #_zero
+#_tmdifcv #_zero
+#_tmdifmv #_zero
+
+$status y;
+label repeat
+if $status "y" =*
+  $_currsnm $:fx1$:snmb1
+  if $_lastsnm $_currsnm =S
+    $_total n; flag to sum differences for grand total
+    call find #_difun #_difcv #_difmv
+;    add to the total pool for this symbol
+    #_tmdifun #_tmdifun #_difun +; do not add ? to total if original face is missing
+    #_tmdifcv #_tmdifcv #_difcv +~
+    #_tmdifmv #_tmdifmv #_difmv +~
+    tmove forward
+    goto repeat
+
+; make sure it points to the last transaction for this security
+if $status "y" =*
+  tmove back; has not reached the bottom of the list pool
+
+$status y
+; undo the effect of the tmove forward & point to the first transaction for this security
+label ~repeat
+if $status "y" =*
+  $_currsnm $:fx1$:snmb1
+  if $_lastsnm $_currsnm =S
+    tmove back
+    goto ~repeat
+
+; make sure it points to the first transaction for this security
+if $status "y" =*; has not reached the top of the list pool
+  tmove forward
+
+$status y
+; set $:sval2
+label Repeat
+if $status "y" =*
+  $_currsnm $:fx1$:snmb1
+  if $_lastsnm $_currsnm =S
+    $_igty y; flag set if even one security is compared by ignoring security type..
+    $:sval2 r; reconciled
+    if #_tmdifun @ #_zero > #_tmdifun @? |
+      $:sval2 u; unreconciled
+    if $_docv "y" =* #_tmdifcv @ #_zero > &
+      $:sval2 u
+    if $_domv "y" =* #_tmdifmv @ #_zero > &
+      $:sval2 u
+    tmove forward
+    goto Repeat
+  else
+    tmove back ; make sure it points to the last transaction for this security
+
+label Next tran
+next tran
+
+rewind
+next list
+
+return
+
+;-------------------------------------------------------------------
+label b Combine cash securities
+;-------------------------------------------------------------------
+$_lasttyp ?
+
+load list
+rewind
+
+; accumulate the values from all records on the list which have this security symbol
+#_tmdifun #_zero
+#_tmdifcv #_zero
+#_tmdifmv #_zero
+sort symb
+load tran
+
+if $:iscash "y" =*! $:iscurr "y" =*! &
+  goto ~Next tran
+
+if $:tradable "y" =*! $_reoutflg "n" =* &
+  goto ~Next tran
+
+if $_dosec "n" =*!
+  $_fnd n;
+  $_ty inty01;
+  $_sn insn01;
+  call check if this security/type needs to be included
+  if $_fnd "n" =*
+    goto ~Next tran
+
+if $_excsec "n" =*!
+  $_fnd n;
+  $_ty exty01;
+  $_sn exsn01;
+  call check if this security/type needs to be excluded
+  if $_fnd "y" =*
+    goto ~Next tran
+
+if $_reoutflg "y" =*
+  undeferr n
+  $_findsym $:symb1
+  call global cash exclusion labels
+  undeferr y
+  if $_excflg "y" =*
+    goto ~Next tran
+
+if $_igntyp "y" =*!
+  if $_lasttyp "?" =*
+    $_lasttyp $:ftype1
+  else
+    if $_lasttyp $:ftype1 =*!
+      cvt $_x _ca_$_lasttyp
+      $$_x r; reconciled
+      if #_tmdifun @ #_zero > #_tmdifun @? |
+        $$_x u; unreconciled
+      if $_docv "y" =* #_tmdifcv @ #_zero > &
+        $$_x u;
+      if $_domv "y" =* #_tmdifmv @ #_zero > &
+        $$_x u;
+      #_tmdifun #_zero
+      #_tmdifcv #_zero
+      #_tmdifmv #_zero 
+      $_lasttyp $:ftype1
+else; ignore two letter security type code but not currency code
+  if $_lasttyp "?" =*
+    $_lasttyp $:fx1
+  else
+    if $_lasttyp $:fx1 =*!
+      cvt $_x _ca_$_lasttyp
+      $$_x r; reconciled
+      if #_tmdifun @ #_zero > #_tmdifun @? |
+        $$_x u; unreconciled
+      if $_docv "y" =* #_tmdifcv @ #_zero > &
+        $$_x u;
+      if $_domv "y" =* #_tmdifmv @ #_zero > &
+        $$_x u;
+      #_tmdifun #_zero
+      #_tmdifcv #_zero
+      #_tmdifmv #_zero 
+      $_lasttyp $:fx1
+
+if $:sval1 "x" =*!
+  $_total n; flag to sum differences for grand total
+  call find #_difun #_difcv #_difmv
+; add to the total pool for this symbol
+  #_tmdifun #_tmdifun #_difun +; do not add ? to total if original face is missing
+  #_tmdifcv #_tmdifcv #_difcv +~
+  #_tmdifmv #_tmdifmv #_difmv +~
+
+label ~Next tran
+next tran
+cvt $_x _ca_$_lasttyp
+$$_x r; reconciled
+if #_tmdifun @ #_zero > #_tmdifun @? |
+  $$_x u; unreconciled
+if $_docv "y" =* #_tmdifcv @ #_zero > &
+  $$_x u;
+if $_domv "y" =* #_tmdifmv @ #_zero > &
+  $$_x u;
+rewind
+
+load tran
+
+if $:iscash "y" =*! $:iscurr "y" =*! &
+  goto ~Mext tran
+
+if $:tradable "y" =*! $_reoutflg "n" =* &
+  goto ~Mext tran
+
+if $_dosec "n" =*!
+  $_fnd n;
+  $_ty inty01;
+  $_sn insn01;
+  call check if this security/type needs to be included
+  if $_fnd "n" =*
+    goto ~Mext tran
+
+if $_excsec "n" =*!
+  $_fnd n;
+  $_ty exty01;
+  $_sn exsn01;
+  call check if this security/type needs to be excluded
+  if $_fnd "y" =*
+    goto ~Mext tran
+
+if $_reoutflg "y" =*
+  undeferr n
+  $_findsym $:symb1
+  call global cash exclusion labels
+  undeferr y
+  if $_excflg "y" =*
+    goto ~Mext tran
+
+if $_igntyp "y" =*!
+  cvt $_x _ca_$:ftype1;
+else
+  cvt $_x _ca_$:fx1;
+
+if $:sval1 "x" =*!
+  $_igty y; flag set if even one security is compared by ignoring security type..
+  $:sval2 $$_x;
+
+label ~Mext tran
+next tran
+rewind
+next list
+
+return
+
+;--------------------------------------------------------------
+label ~Check if this security is set such that type should be ignored
+;--------------------------------------------------------------
+$_ty inty01
+$_sn insn01
+
+label ~Loop
+
+if $$_ty "" =*! $$_ty "?" =*! & $$_sn "" =*! $$_sn "?" =*! & |
+  if $$_ty "" =* $$_sn $:snmb1 =S &
+    $_ignore y;
+  else
+    bump $_ty
+    bump $_sn
+    goto ~Loop
+
+return
+
+;-------------------------------------------------
+label find #_difun #_difcv #_difmv
+;-------------------------------------------------
+#_difun #_zero
+#_difcv #_zero
+#_difmv #_zero
+
+if #:nval4 @? $:sval4 "n" =* $:sval4 "?" =* | &
+  #:nval4 #_zero
+if $_same "y" =* ; Init. print flag.
+  $_pflag y
+else
+  $_pflag n
+
+undeferr n
+; Minimum Market Value
+cvt $_typapr $:ftype1$_apr
+if #$_typapr @?;   using global labels ==> $recprec and #recprec
+  if $recprec "P" =* $recprec "p" =* |
+    #__minmv #:nval1 #_minmv*
+  else
+    #__minmv #_minmv
+else
+  if $$_typapr "P" =* $$_typapr "p" =* |
+    #__minmv #:nval1 #$_typapr *
+  else
+    #__minmv #$_typapr
+
+; Quantity
+if $:iscash "n" =*;
+  if #:nval4 @?
+    #_difun #:miss
+  else
+    #_difun #:nval0 #:nval4 -
+  if #$:ftype1 @?!;  Special handling for MBS
+    if $mbsprec "P" =* $mbsprec "p" =* |
+      #_minqty #mbsprec #:nval0*
+    else
+      #_minqty #mbsprec
+  else
+    cvt $_typqpr $:ftype1$_qpr
+    if #$_typqpr @?
+      if $qprec "P" =* $qprec "p" =* |
+        #_minqty #qprec #:nval0 *
+      else
+        #_minqty #qprec
+    else
+      if $$_typqpr "P" =* $$_typqpr "p" =* |
+        #_minqty #$_typqpr #:nval0*
+      else
+        #_minqty #$_typqpr
+else; cash, qty = mval
+;  #_difun #:nval1 #:bucks -
+  #_difun #:nval1 #:nval4 -
+  #_minqty #__minmv
+
+undeferr y
+; adjust the difun number to the correct
+; rounded number given the number of decimal places
+; that type.inf has specified BEFORE comparing to
+; tolerance value
+if #_qtyprec 1 =
+  if $:iscash "y" =* $:iscurr "y" =* | 
+    cvt $temp #81_difun
+  else
+    cvt $temp #9_difun
+else
+  cvt $temp #7_difun
+#_temp $temp@(
+#_difun #_temp
+
+; check for units difference against minqty, but  for equals
+; check, use approximation because decimal to binary conversion
+; may put spurious number at end
+;.$:fname #6_difun #6_minqty\n
+; Here we are comparing quantity. CASH uses #__minmv value for #_minqty.
+; #__minmv can be overridden by #recprec, so if #recprec is not defined,
+; we need to use "<" to be consistent with the MV and CV comparisons.
+if #recprec @?
+  #recprec #_syrprec
+undeferr n
+if $:iscash "n" =*
+  if #_difun @ #_minqty <= #_difun @?! &
+    #_difun #_zero
+  else
+; flag that portfolio has at least one position that did not
+; reconcile for included cash securities only
+    if $:iscash "y" =* $:iscurr "y" =* | $:sval1 "x" =* & !
+      $_pflag y
+      $_recon n
+else; cash
+  if #$_typapr @?! #recprec @?! |
+    if #_difun @ #_minqty <= #_difun @?! &
+      #_difun #_zero
+    else
+; flag that portfolio has at least one position that did not
+; reconcile for included cash securities only
+      if $:iscash "y" =* $:iscurr "y" =* | $:sval1 "x" =* & !
+        $_pflag y
+        $_recon n
+  else
+    if #_difun @ #_minqty < #_difun @?! &
+      #_difun #_zero
+    else
+; flag that portfolio has at least one position that did not
+; reconcile for included cash securities only
+      if $:iscash "y" =* $:iscurr "y" =* | $:sval1 "x" =* & !
+        $_pflag y
+        $_recon n  
+undeferr y
+
+; Market value
+if $_domv "y" =*
+  #_mv #:nval5
+  if #_mv @?
+    #_mv #_zero
+    $_pflag y
+    $_recon n
+    #_difmv #:nval1
+    if #:pri @?
+      #_mv #:miss
+      #_difmv #:miss
+    if #:nval4 #_zero =
+      #_mv #_zero
+      #_difmv #:nval1
+    cvt $tpmv #8_difmv
+    #_tpmv $tpmv @(
+    #_difmv #_tpmv
+    if $_total "y" =*
+      #_tdifmv #_tdifmv #_difmv +~
+      if $:sval1 "x" =*!
+        #_tydifmv #_tydifmv #_difmv +~
+    goto skipmv
+
+  #_difmv #:nval1 #_mv -
+  cvt $tpmv #8_difmv
+  #_tpmv $tpmv @(
+  #_difmv #_tpmv
+  undeferr n
+  if #$_typapr @?! #recprec @?! |; #recprec or #$_typeapr is defined, use <= to compare
+    if #_difmv @ #__minmv @ <=
+      #_difmv #_zero
+    else
+; exclude reout difcsts from the total difcst for cash accounts only
+      if $:iscash "y" =* $:iscurr "y" =* | $:snmb1 "*" =S & $:sval1 "x" =* & !
+        $_pflag y
+; flag that portfolio has at least one position that did not reconcile
+        $_recon n
+        if $_total "y" =*
+          #_tdifmv #_tdifmv #_difmv +
+          if $:sval1 "x" =*!
+            #_tydifmv #_tydifmv #_difmv +
+  else; #recprec or #$_typeapr is undefined, use < to compare
+    if #_difmv @ #__minmv @ <
+      #_difmv #_zero
+    else
+      if $:iscash "y" =* $:iscurr "y" =* | $:snmb1 "*" =S & $:sval1 "x" =* & !
+        $_pflag y
+        $_recon n
+        if $_total "y" =*
+          #_tdifmv #_tdifmv #_difmv +
+          if $:sval1 "x" =*!
+            #_tydifmv #_tydifmv #_difmv +
+  undeferr y
+label skipmv
+
+;Cost Basis
+if $_docv "y" =*
+  #_cv #:nval3
+  if #_cv @?
+    #_cv #_zero
+  undeferr n
+  cvt $_typcpr $:ftype1$_cpr
+  if #$_typcpr @?;   using global labels $cprec and #cprec
+    if $cprec "P" =* $cprec "p" =* |
+      #__mincv #:nval2 #_mincv*
+    else
+      #__mincv #_mincv
+  else
+    if $$_typcpr "P" =* $$_typcpr "p" =* |
+      #__mincv #:nval2 #$_typcpr *
+    else
+      #__mincv #$_typcpr
+
+  #_difcv #:nval2 #_cv -
+  cvt $tpcv #8_difcv
+  #_tpcv $tpcv @(
+  #_difcv #_tpcv
+  if #cprec @?
+    #cprec #_sycprec
+  if #$_typcpr @?! #cprec @?! |; if #cprec or #$_typcpr is defined, use <= to compare
+    if #_difcv @ #__mincv @ <=
+      #_difcv #_zero
+    else
+      if $:iscash "y" =* $:iscurr "y" =* | $:snmb1 "*" =S & $:sval1 "x" =* & !
+        $_pflag y
+        $_recon n
+        if $_total "y" =*
+          if $_dotaxlot "y" =*; sum missing values when reconciling by taxlot
+            #_tdifcv #_tdifcv #_difcv +~
+            if $:sval1 "x" =*!
+              #_tydifcv #_tydifcv #_difcv +~
+          else
+            #_tdifcv #_tdifcv #_difcv +
+            if $:sval1 "x" =*!
+              #_tydifcv #_tydifcv #_difcv +
+  else; #cprec or #$_typcpr is undefined, use < to compare
+    if #_difcv @ #__mincv @ <
+      #_difcv #_zero
+    else
+      if $:iscash "y" =* $:iscurr "y" =* | $:snmb1 "*" =S & $:sval1 "x" =* & !
+        $_pflag y
+        $_recon n
+        if $_total "y" =*
+          if $_dotaxlot "y" =*; sum missing values when reconciling by taxlot
+            #_tdifcv #_tdifcv #_difcv +~
+            if $:sval1 "x" =*!
+              #_tydifcv #_tydifcv #_difcv +~
+          else
+            #_tdifcv #_tdifcv #_difcv +
+            if $:sval1 "x" =*!
+              #_tydifcv #_tydifcv #_difcv +
+  undeferr y
+return
+
+;------------------------------
+label X get userdefined labels
+;------------------------------
+; strip the backslash
+$$_svudefx $1$_svudefx
+
+; get the operator #,$,%
+$_x1 $<1$_svudefx
+
+; strip the operator
+$$_svudefx $1$_svudefx
+
+if $_x1 "$" =*
+  cvt $_p $$$_svudefx
+if $_x1 "#" =*
+  cvt $_p #$$_svudefx
+if $_x1 "%" =*
+  cvt $_p %$$_svudefx
+
+$$_svudefx $_p
+
+return
+
+;------------------------
+label write to xml output
+;------------------------
+comma n
+if $_frstopn "y" =*
+  outdisk $outfile ndy; over write
+  $_frstopn n;
+  .<SIPOS>\n
+else
+  outdisk $outfile ady; appends
+
+load list
+load tran
+.  <Detail ReportDate="%cutdate"
+
+$temp  $:fileo
+xmlescape $temp
+. Portfolio="$temp"
+
+$temp $:symb1
+xmlescape $temp
+. Symbol="$temp";
+
+if $:sval3 "y" =*
+  $_reconci y;
+else
+  $_reconci n;
+. Reconcile="$_reconci";
+
+;write user defined labels
+$_svudefx udef0
+$_tag UserDefined;
+#_cnt 0;
+call d write the userdefined labels to the xml
+./>\n
+next tran
+next list
+fclose
+comma y
+
+return
+
+;---------------------------------------------------
+label d write the userdefined labels to the xml
+;---------------------------------------------------
+cvt $_text $_tag#_cnt
+if $$_svudefx "?" =*!
+  $temp $$_svudefx
+  xmlescape $temp
+  . $_text="$temp"
+  bump $_svudefx
+  #_cnt #_cnt @+
+  goto d
+return
+
+;---------------------------------------------------
+label global cash exclusion labels
+; set $_findsym prior to calling label global
+;---------------------------------------------------
+$_xcash reout00
+$_excflg n
+label h
+if $$_xcash "?" =*! ; It's defined. Put on list with flag saying this is an excluded cash account.
+  $_symb $_ca$:scurr$$_xcash
+  if $_symb $_findsym =*
+    $_excflg y
+    return
+  bump $_xcash
+  goto h
+return
+
+;------------------------
+label J end of group line
+;------------------------
+
+if $_didprt "n" =*!
+  $_didprt n
+  if $_option "a" =*!
+    cvt $_lab $_grp$gnm
+    $find :;
+    strstr $$_lab 0 $find #offset
+    substr $$_lab 0 #offset $dest
+    #offset #offset 1+
+    substr $$_lab #offset 999 $dest2
+    if $$_tem "y" =*
+      cvt $_prntln ***** $dest- <$dest2 > reconciled *****
+    else
+      cvt $_prntln ***** $dest- <$dest2 > did not reconcile *****
+  if $_option "c" =* $_domv "n" =* & $_docv "n" =* &
+    .\n$_prntln\n
+  else
+    .~~~
+    if $_same "n" =* $_docv "n" =* &
+      .     --------------~
+    if $_domv "y" =*
+      .  --------------  --------------  --------------
+    if $_docv "y" =*
+      .  --------------  --------------  --------------
+    .\fS\n
+    .TOTAL~~~
+    if $_same "n" =* $_docv "n" =* &
+      .#~8_tcost
+    if $_domv "y" =*
+      .#~8_tintmv #~8_tadvmv #~8_tdifmv
+    if $_docv "y" =*
+      .#~8_tintcv #~8_tadvcv #~8_tdifcv
+    .\fN
+    if $_option "a" =*!
+      .\n$_prntln\n
+#_tcost 0
+#_tintmv 0
+#_tadvmv 0
+#_tdifmv 0
+#_tintcv 0
+#_tadvcv 0
+#_tdifcv 0
+
+return
+
+
+trailer
+ADDED the following general enhancements to the sipos21.rep generalized
+recon. report
+
+- count reconciled and unreconciled and total portfolios processed
+- make difference in units sensitive to type.inf decimal places
+  with temp variable
+- add $reout processing to exclude specific cash accounts from the
+  report
+- add a recon. tolerance #recprec label for precision
+- add option to print security description or not
+- correction for cash securities to compare units difference against
+  market value threshold
+- better case handling of setting settle date
+  (see non-custom parts of ccpos.rep)
+- use approx. equal for comparisons because of number precision
+- print FULL decimal places specified in type.inf for dollar value
+  and quantities because of the #recprec overriding $pennies issue.
+
+- added t3 SEI Trust300 interface customization switch
+
+3/4/99 Lixin
+- Modify this report so that the advent cost and market value show up
+in terms of reporting currency, not system currency.
+- Add to the dialog box the option to choose the
+reporting currency you want this report to work for.
+
+3/26/99 Lixin
+      - In this report, with cash, usually it takes the quantity to be
+        the market value. But with multicurrency cash, its different.
+        Its quantity should be #:adun not #:bucks.
+      - The multicurrency cash market value should be #:bucks ,not #::mval0.
+
+4/14/99 Lixin
+      - Fix to get the face value if there are more than one lot of the security.
+
+5/15/99 SMG
+      - If there is no position in client file, but there is a li position in the pos file, print zero
+      for advent quantity.
+
+7/1/99 SMG When running the report, it picks up all the unsupervised assets properly, instead of only for the
+  first portfolio in a group.
+  -
+
+8/17/99 SMG The default option to run the report has been changed from all positions to unreconciled
+  positions only.
+
+12/7/99 SMG Made the interface and advent quantity for cash securities sensitive to security
+        type settings for decimals in quantity.
+
+3/16/00 SMG (1) $unrecon label is being read in after the name of the portfolio not reconciled.
+  $unrecon is read from system/netwide settings, overridden by portfolios.
+  (2) #qprec label works again.  it was not picking it up if it was exactly equal to the value of
+  #qprec.  Now we've changed it so that its only if the difference is bigger than #qprec.
+
+04/17/2000 Lixin Fix:
+(1) when running this report, it should be sensitive to market value - it
+should be able to consider the portfolios reconciled for market value
+(depending on the $pennies label settings) - does not reconcile for
+differences  of .01 or less
+
+(2) The report does not reconcile based on cost basis either if the value is
+.01 or less
+
+(3) if a client file is chosen through the browse button (because its not in
+the standard path of client files) and even if the pos file is in the
+standard path, the report cannot find the pos file.
+
+
+4/25/00 SMG
+Reconciling to differences > .005, vs. .01
+
+5/12/00 SMG
+reconcile label ($unrecon) put next to name of portfolios not reconciled.
+
+06/02/00 Lixin Fix:
+The label $unrecon (set up in netwide) should show up if the portfolio is
+NOT reconciled and if the label exists in the netwide settings.
+
+8/9/00 Lixin Fix:
+If you are reconciling foreign cash, Quantity and Cost
+appear to work correctly.  If you choose to reconcile Market Value, however,
+the "Advent Market Value" column actually lists the cost basis for the
+foreign cash.  It will not tie out with an appraisal.
+
+10/31/00 SMG
+- Make the following changes to this report:
+1. If the group is chosen through "browse" and not in the standard path of groups,
+   then the correct pos file is not found. The length of path has no bearing on why
+   you receive an error MSG of "no corresponding position file was found".
+
+2. The display of this report will remain the same.  If the security falls within
+   the tolerance range, either in absolute or percentage value, the account will
+   display as Reconciled.  If the security falls outside the tolerance range,
+   either in absolute or percentage value, the account will display as Unreconciled.
+
+11/1/00 SMG
+Let's change the definition from the Y or y to P or p for the following labels:
+
+$qprec
+$mbsprec
+$recprec
+$cprec
+
+I think using the P or p is more intuitive since one sets up this label to reconcile by percentage.  Thanks.
+
+11/7/00 SMG
+SCR : 7000876 - Cost Basis Checkbox added to all options of arguments.  will ALWAYS show cost basis checkbox,
+regardless of the argument.
+
+11/13/00 Lixin
+Report label logic:
+ %reconto = date portfolio was last reconciled, only exists in portfolios if unreconciled
+ %unrecto = date recon report was last run for this portfolio, only exists in portfolios is unreconciled
+ Labels are written to unrecon.trn by reconciliation report only when you choose to run create group of unreconciled accounts
+
+Status Before Running Report
+		Reconciled					Unreconciled
+If report displays portfolio as reconciled:	 If report displays portfolio as reconciled:
+ Nothing is written to unrecon.trn			 %% reconto and %% unrecto written to unrecon.trn
+ Portfolio does not have %reconto or %unrecto   After posting unrecon.trn, portfolio does not
+  labels 							  have %reconto or %unrecto
+
+If report displays portfolio as unreconciled:    If report displays portfolio as unreconciled:
+ %reconto and %unrecto written to unrecon.trn    %reconto is already in portfolio, it remains
+ %reconto = day before report      %unrecto written to unrecon.trn
+             run date
+ %unrecto = report run date                      %unrecto is updated to report run date
+ After posting unrecon.trn, portfolio has        After posting unrecon.trn, portfolio
+  %reconto and %unrecto                            has %reconto and %unrecto
+SCR: 7000827
+
+11/16/00 Lixin
+change: in all the dialog box options, make the report settings sensitive to
+settle date.  this should be in ALL dialog box options.  remove the checkbox
+from the dialog box options. the output though should be the same.  the
+settings tab replaces the dialog box checkbox
+SCR: 7000878
+
+11/21/00 SMG
+SCR 7000885 - create unrecon.trn based on label $rectrn set to "y".
+
+
+11/17/00 SMG
+absolute paths not working properly still
+fixed.  SCR: 7000798
+
+12/5/00 SMG SCR#7000895 $unrecon wasnt showing up in the name field
+
+12/5/00 SMG SCR#7000895 $unrecon showing up twice in $name field.
+The $unrecon label must exist, the portfolio must be in unrecon.grp otherwise $unrecon wil not
+show up automatically in the header.
+
+12/19/00 SMG SCR#7000895 $unrecon showing up twice in $name field.
+The $unrecon label must exist, the portfolio must be in unrecon.grp otherwise $unrecon wil not
+show up automatically in the header.
+
+The reason it was showing up twice is because in rep32.exe, there is a command which adds
+$unrecon to the $name field if the following condiitions are met:
+-%reconto is before report run date
+-portfolio shows up in unrecon.grp
+- $unrecon is defined in system settings
+
+12/27/00 SMG
+FIle names still showing up with incorrect paths.
+
+03/08/01 SMG
+Removed $unrecon from condition to print.  Based on SCR 7000937
+In rep32.exe, there is already a name fixup, such that if $unrecon exists, the portfolio is in @unrecon.grp and
+the date condition for %reconto is satisfied, the $unrecon label will print on ALL reports next to $name.
+There was no need to double print it here.
+
+05/03/01 SMG
+SCR: 7000917 : If cash security type label has tolerance defined as a
+ percentage, a reconciled portfolio will display as unreconciled. This only
+ occurs with security type caus and in the reconciliation of "trade amount"
+ (apr). The $ for security type caus works in the reconciliation of
+ "quantity" (qpr) and "cost basis" (cpr). If user sets up a $causapr with
+the tolerance defined as an absolute value, it works fine.
+
+
+05/07/01 SMG
+SCR: 7000879  It looks like Sipos30 does not print a ? for quantity for an asset backed
+security if it cannot calculate the original face for the security.
+Instead, it reports the quantity as 0. This can be a problem if you have sold out
+of a position but not recorded the closing transaction correctly. So, we need
+to tighten up how the report calculates and displays original face.
+
+06/14/01 Lixin
+ SCR 7000972
+ Sipos30.rep currently only does a summation for the difference.  Please also
+ provide the summation of Interface Market Value, Advent Market Value,
+ Interface Cost, and Advent Cost for each portfolio.  This is a
+ change/request from beta site #43900, Arthur Anderson.  Having a grand total
+ at the bottom of the portfolio is helpful because client can easily see the
+ market value or cost associated with a particular portfolio.
+ SCR 700971 - Displays portfolio name of reconciled portfolio
+
+
+6/20/01 Lixin
+- SCR 7000975 report does not always pick up when the difference is less than .02.
+
+7/09/01 5:51p Mg
+ Checking in the following fixes for SMG:
+ SCR 7000971- Display portfolio name for reconciled portfolio
+ SCR 7000972- Summation of market value and cost on report for each
+ portfolio
+ SCR 7000975- Difference of less than .02 is not being picked up by
+ report consistently.
+ SCR 7000879- Report puts in a zero value when it cannot calculate
+ original face of MBS security.
+
+08/14/01 SMG
+SCR 7000941  - Made the report management style
+
+09/19/01 SMG
+SCR 7000993
+If users run this report by with the selection to "reconcile by market values" and the price file is missing in Axys, a zero value will populate in the Advent Market Value column on report and portfolio is displayed as reconciled.  Even though an error message such as can't open e:\atn\price\083101.pri for Bob will appear at report run time, users don't necessary notice it and may not realize that a price file in Axys is missing.   Thus, the report displaying portfolio as reconciled is incorrect because of missing price file.
+
+We would like to change the current behavior and populate a ? into the Advent Market Value instead of a 0 when the price file for security is missing  (just like Axys reports when price file is missing) and display portfolio as unreconciled.
+
+Test files located in Axys on Cheetah\bugs\dataport\7000993 to see the issue.
+Run sipos30.rep with the selection to Reconcile market values for 8/31/2001.  Make sure there is now price file for 8/31/2001 in Axys. After running the report, you'll notice that Advent Market Value column has a 0 value and portfolio is shown as reconciled.
+
+11/06/01 SMG
+1.  Sipos30.rep to display ? instead of a zero when price file is missing. (7000993)
+2.  Sipos30.rep should display a zero and not a ? when the position does not exist in the client file. 7000793
+3.  Change the unrecxxx labels so that they can accommodate more than 10,000 portfolios (7000828)
+
+12/14/01 Lixin
+SCR 7000973: Sipos30 should display a zero in quantity/market value/cost when the position
+does not exist in the client file
+
+1/07/02 SCR 7001030
+When running the Standard Position Reconciliation Report, sipos30.rep, users may define custom labels in Netwide or Firmwide to consider a difference within a specific range to be reconciled.  If the value in the definition field is defined as 1 (i.e. #qprec = 1) because users consider a difference of 1 in quantity  to be reconciled, then this should mean that a quanity that is less than or equal to 1 is reconciled.  This was the logic in DP 3.4 but was broken in DP 3.5.1.  In 3.5.1,  it only treats a  difference of less than one and not equal to 1 as reconciled.
+
+Test files located in Axys on "Cheetah"\Bugs\Dataport\7001030
+Run the Standard Position Reconciliation Report, sipos30.rep, for 1610.cli using a date of 9/30/01.  Please make sure that check boxes for Reconcile market value and Reconcile by cost basis are both checked and the following custom labels are defined in Netwide or Firmwide as follows:
+
+#qprec = 1
+#recprec = 200000
+#cprec = 1000
+
+If run with DP 3.5.1, this report will display portfolio as unreconciled.  The correct outcome should display portfolio as reconciled.
+
+
+Description:
+
+When running the Standard Position Reconciliation Report, sipos30.rep, users may define custom labels in Netwide or Firmwide to consider a difference within a specific range to be reconciled.  If the value in the definition field is defined as 1 (i.e. #qprec = 1) because users consider a difference of 1 in quantity  to be reconciled, then this should mean that a quanity that is less than or equal to 1 is reconciled.  This was the logic in DP 3.4 but was broken in DP 3.5.1.  In 3.5.1,  it only treats a  difference of less than one and not equal to 1 as reconciled.
+
+Test files located in Axys on "Cheetah"\Bugs\Dataport\7001030
+Run the Standard Position Reconciliation Report, sipos30.rep, for 1610.cli using a date of 9/30/01.  Please make sure that check boxes for Reconcile market value and Reconcile by cost basis are both checked and the following custom labels are defined in Netwide or Firmwide as follows:
+
+#qprec = 1
+#cprec = 1000
+
+If run with DP 3.5.1, this report will display portfolio as unreconciled.  The correct outcome should display portfolio as reconciled.
+
+
+03/02/2002  SMG - SCR: 7001047
+1. From the Settings button in the Position Reconciliation report UI, user
+needs the ability to make a selection in the Accrued Interest field in
+Report Settings.
+
+2. This option to set the Accrued Interest field needs to be available as a
+command line argument for users who run this report as part of a script.
+This is required since this is the only method users can select to run this
+report using the Accrued Interest field without having to change it in
+Netwide or Firmwide.
+
+3. Override Portfolio Settings in Report Settings dialog box is checked by
+default. Please make sure that if user unchecks this box, then Portfolio
+Settings will take precedence over settings in Netwide or Firmwide.
+
+
+3/13/02 Lin
+SCR 7001047 (Accrued Interest field)
+If only one letter may be used, then please use the followings as we discussed earlier:
+
+All reports as of Trade Date AM           t
+All reports as of Trade Date PM           p
+All reports as of Settle Date AM           d
+All reports as of Settle Date PM           m
+
+
+04/17/2002  Lin
+if you run the report with the arguments - things work well
+if you run the report without the argument - the report should pick up the
+AI settings in Netwide, and overwritten by portfolio.
+
+Here's a scenario - you run the report - no arguments - the report should
+pick up the portfolio settings.  this is broken.
+
+
+04/30/2002  Lin
+SCR: 7001052
+Sipos30.rep needs to display original face if user selects "Use Original Face"
+
+05/02/02 smg
+fixed $dbmk to be $dbmsk
+
+
+05/03/2002
+SCR: 7001071 the report is not picking up the value in Advent Quantity column for the
+unsupervised security when the Include Unsupervised Assets box is checked.
+
+SCR 7001075 - $pmai error message is gone
+SCR 7001072 - Security Descriptions not appearing properly.
+
+
+$Header: $/APX/Trunk/APX/DP/Dataport/SIPOS30.REP  2011-05-09 14:35:25 PDT  ADVENT/astanchi $
+$Log: $/APX/Trunk/APX/DP/Dataport/SIPOS30.REP $
+; 
+; 2011-05-09 14:35:25 PDT ADVENT\astanchi
+; SCR 3323555:  Sipos30 - asset incorrectly shows as unreconciled -> Market
+; Value difference is rounded to currency precision, sensitive to pennies.
+; 
+; 2011-01-10 07:59:23 PST ADVENT\astanchi
+; Fix typo - Remove duplicate return lines.
+; 
+; 2010-12-01 09:17:13 PST ADVENT\astanchi
+; SCR 3323631:  SQL error when adding members to unrecon group -> Before
+; writing unrecon group, save portfolios to the list and remove duplicates.
+; 
+; 2010-11-08 10:39:09 PST ADVENT\astanchi
+; SCR 3323481:  Sipos30.rep only sensitive to "ca" cash types -> Fix SCR
+; number
+; 
+; 2010-11-08 10:33:18 PST ADVENT\astanchi
+; SCR 3323481:  Sipos30.rep only sensitive to "ca" cash types -> When
+; excluding cash securities,  update sipos30.rep to check cash properties and
+; not security type code to determine whether security is cash.
+; 
+; 
+; 2010-11-08 10:00:29 PST ADVENT\astanchi
+; SCR 3323022:  Cost Basis Legislation ->  Reconcile cash security as a
+; position when reconciling by taxlot.  For non reporting currency cash, use
+; original cost if available (#:nval4), if not use trade amount (#:bucks). 
+; When reconciling by taxlot:  display  title as Taxlot Reconciliation; when
+; ignoring security type, do not combine taxlots as a position; show unmatched
+; custodian taxlot as ? for custodian taxlots with no origina cost date and
+; original cost.
+; 
+; 2010-09-27 12:44:59 PDT ADVENT\astanchi
+; SCR 3322022:  Cost Basis Legislation ->  add ability to reconcile by tax
+; lots
+; 
+; 2010-09-16 08:13:13 PDT ADVENT\astanchi
+; SCR 3322919:   sipos30 should use global currency -> Update label $reoutXX
+; to use global currency
+; 
+; 2010-03-30 10:04:02 PDT ADVENT\astanchi
+; APX SCR 3321640:  Sipos30.rep - accrued interest footnote prints too many
+; times
+; 
+; 2010-03-30 09:39:28 PDT ADVENT\astanchi
+; APX SCR 3321640:  Sipos30.rep - accrued interest footnote prints too many
+; times
+; 
+; 2009-09-28 14:49:43 PDT ADVENT\astanchi
+; APX SCR 3320123:  "Sum Cash Balances" total line not appearing
+; 
+; 2009-09-28 14:16:47 PDT ADVENT\astanchi
+; APX SCR 3320118:  "Sum cash balances" causes error for multiple
+; securities/currencies
+; 
+; 2009-08-21 14:45:00 PDT ADVENT\astanchi
+; APX SCR 3319822:  Sipos Reconciles Positions and Portfolios Based on
+; Reporting Quantity Display
+; 
+; 2009-08-07 11:01:35 PDT ADVENT\astanchi
+; APX SCR 3319655: $arg script setting does not override macro accrued
+; interest
+; 
+; 2009-08-04 08:12:31 PDT ADVENT\astanchi
+; APX SCR 3319599:  Do not include accrued interest  
+; 
+; 
+; 2009-07-09 16:01:41 PDT ADVENT\astanchi
+; APX SCR 3319296  Fix report type in accrued interest message
+; 
+; 2009-06-24 07:05:51 PDT ADVENT\astanchi
+; APX SCR 3319070:  Sipos doesn't list small differences for cash accounts
+; 
+; 2009-06-17 12:44:38 PDT ADVENT\astanchi
+; APX 3318595: OSI- Reporting Enhancement for the new Options Symbology
+; Initiative
+; 
+; 2009-06-09 12:56:58 PDT ADVENT\astanchi
+; APX 3318595: OSI- Reporting Enhancement for the new Options Symbology
+; Initiative
+; 
+; 2009-06-09 12:44:41 PDT ADVENT\astanchi
+; APX 3318595: OSI- Reporting Enhancement for the new Options Symbology
+; Initiative
+; 
+; 2009-06-09 10:48:55 PDT ADVENT\astanchi
+; APX SCR 3318450: Sipos30 - Do not include accrued interest
+; 
+; 2009-02-20 08:38:18 PST ADVENT\astanchi
+; APX SCR 3317228:  Compute MBS/CMO positions using settle date for pd, rc, in
+; transactions.
+; 
+; 
+; 2009-01-09 15:06:15 PST ADVENT\astanchi
+; APX SCR 3317398: "Ignore Security Type" should be done only within a
+; currency
+; 
+; 2008-12-12 11:43:47 PST ADVENT\astanchi
+; APX SCR 3317237: "Sum cash account balances" sums quantities for all types
+; 
+; 2008-12-09 08:51:20 PST ADVENT\astanchi
+; APX SCR 3317191: Sipos30 should use either $reoutxx labels or Tradable flag
+; but not both
+; 
+; 2008-11-10 09:04:36 PST ADVENT\astanchi
+; APX SCR 3316864: $exlocx causes erroneous exclusions for same day
+; transactions -> #zero is not initialized.
+; 
+; 2008-05-02 17:31:43 PDT ADVENT\astanchi
+; APX SCR 3314697: Update sum cash balance option -> only show cash positions
+; if rolled up cash balance is unreconciled.
+; 
+; 2008-05-02 17:13:18 PDT ADVENT\astanchi
+; APX SCR 3308823:  Report incorrectly shows portfolio as unreconciled when
+; run with option to list All positions and the only unreconciled positions
+; should be excluded via $reoutXX labels.
+; 
+; 2008-04-16 09:54:12 PDT ADVENT\astanchi
+; APX SCR 3314653: Sipos30.rep doubles total cost and market value difference
+; when ignore security type is selected.
+; 
+; 2008-04-01 16:08:34 PDT ADVENT\astanchi
+; APX SCR 3313972:  Update report to filter by security using case insenstive
+; comparison.
+; 
+; 2008-03-03 16:19:26 PST ADVENT\astanchi
+; APX SCR 3314049:  Incosistent mixed case in report dialog options  -> Update
+; hot key for reconcile by cost basis.
+; 
+; 2008-02-22 13:57:12 PST ADVENT\astanchi
+; APX SCR 3308824: $exlocx not working if x is greater than 9  
+; APX SCR 3308825: $exlocx does not work if defined in portfolio settings  
+; 
+; 2008-02-22 09:56:39 PST ADVENT\astanchi
+; APX SCR 3314049: Incosistent mixed case in report dialog options
+; 
+; 2008-02-22 09:40:37 PST ADVENT\astanchi
+; APX SCR 3313084: If there are portfolio positions and there are no custodial
+; positions, display an error message and report as unreconciled.
+;  
+; If there are no portfolio positions and there are no custodial positions, do
+; not display error message and report as reconciled.  
+;  
+; If there are no portfolio positions and there are custodial
+; positions,display an error message and report as reconciled.
+; 
+; 2008-02-22 08:45:45 PST ADVENT\astanchi
+; APX SCR 3314065: Clean up label find when comparing minimum qty  
+; 
+; 
+; 2008-01-09 08:48:19 PST ADVENT\astanchi
+; APX SCR 3313017: Provide an option to sum cash balances -> Update report to
+; only show balance for tradable cash security types.
+; 
+; 2007-12-12 11:36:40 PST ADVENT\astanchi
+; APX SCR 3313826: Sipos position reconciliation report is showing ? instead
+; of 0 if the position is not held by portfolio but is by the custodian.
+; 
+; 2007-11-15 12:04:29 PST ADVENT\astanchi
+; APX SCR 3313017: Add option to sum cash balances -> Exclude $reoutXx and non
+; tradable cash accounts.  Add option to sum tradable cash accounts.
+; 
+; 2007-11-15 08:40:25 PST ADVENT\astanchi
+; APX SCR 3313017: Add option to sum cash balances -> Only sum tradeable cash
+; and exclude $reoutXX
+; 
+; 2007-10-29 15:38:41 PDT ADVENT\astanchi
+; APX SCR 3313364: Update report to use currency precision when showing cash.
+; 
+; 2007-10-17 17:00:05 PDT ADVENT\astanchi
+; APX SCR 3313017: Add option to sum cash balances 
+; 
+; 2007-10-17 11:03:23 PDT ADVENT\astanchi
+; APX SCR 3312417: Undefined label errors when reconciling more than 9
+; specific securities -> Update limit to 99
+; APX SCR 3308862: Undefined label errors when excluding more than 8
+; securities -> Update limit to 99
+; 
+; 2007-10-17 10:48:58 PDT ADVENT\astanchi
+; APX SCR 3312417: Undefined label errors when reconciling more than 9
+; specific securities -> Fix typo
+; 
+; 2007-10-17 10:31:47 PDT ADVENT\astanchi
+; APX SCR #3309633 Remove references to flat files from reports. 
+; 
+; 2007-10-17 09:56:11 PDT ADVENT\astanchi
+; APX SCR #3307074 #csusapr,#csuscpr,#csusqpr not showing as reconciled ->
+;  If cash
+;    If #recprec or #<typeapr> is defined then use <=, otherwise use <
+; 
+; 2007-10-15 08:02:57 PDT ADVENT\astanchi
+; APX 3313183: Updated report so that a portfolio with transactions but no
+; custodial positions is marked as unreconciled.
+; 
+; 2007-08-03 11:41:26 PDT ADVENT\astanchi
+; APX SCR 3312417: Undefined label errors when reconciling more than 9
+; specific securities  -> The report will only specifically include upto 99
+; securities.  After 99 securities, the report will stop asking the user for
+; securities to include.
+; APX SCR 3308862: Undefined label errors when excluding more than 8
+; securities -> The report will only exclude up to 99 securities. After 99
+; securities, the report will stop asking the user for securities to exclude.
+; 
+; 2007-08-03 11:33:15 PDT ADVENT\astanchi
+; APX SCR 3312417: Undefined label errors when reconciling more than 9
+; specific securities  -> Updated inty to begin at 01 instead of 1
+; APX SCR 3308862: Undefined label errors when excluding more than 8
+; securities -> Updated exty to begin at 01 instead of 1
+; 
+; 2007-08-03 09:23:49 PDT ADVENT\astanchi
+; APX SCR #3309633 Remove references to flat files from reports  
+; 
+; 2007-08-02 14:02:27 PDT ADVENT\astanchi
+; APX SCR 3307074 : #csusapr,#csuscpr,#csusqpr not showing securities as
+; reconciled  - > Fixed $_typqpr undefined error.
+; 
+; 
+; 2007-08-01 15:58:12 PDT ADVENT\astanchi
+; APX SCR #3308822  Update report to ignore cash securities specified in
+; labels $reoutxx when checkbox " Ignore All Security Types" is checked.
+; 
+; 2007-08-01 15:42:54 PDT ADVENT\astanchi
+; APX SCR #3308838 Updated report to show ? quantity if original face is
+; missing and MBS setting is original face. Update security symbol total
+; _tmdifun to handle adding ? for the  ignore security type option.
+; 
+; 2007-08-01 14:41:06 PDT ADVENT\astanchi
+; APX SCR #3308838 Updated report to show ? quantity if original face is
+; missing and MBS setting is original face.
+; 
+; 2007-08-01 11:50:50 PDT ADVENT\astanchi
+; APX SCR #3307075 Fix report to be sensitive to #mbsprec label
+; 
+; APX SCR #3307074 #csusapr,#csuscpr,#csusqpr not showing as reconciled ->
+; Updated to handle MBS Precision 
+; Trade Amount:  
+; If #recprec or #<type>apr is defined then use <= , otherwise use <
+; Quantity: 
+; If cash
+;   If #recprec or #<typeqpr> is defined then use <=, otherwise use <
+;   Cash uses #__minmv value for #_minqty
+;   #__minmv can be overwritten by #recprec
+; If not cash and is mbs
+;   If #mbsprec is defined then use <=, otherwise use < for comparison
+; If not cash and not mbs
+;   If #qprec or #<typeqpr> is defined then use <=, otherwise use <
+; Cost Basis:    
+; If #cprec or #<type>cpr is defined then use <= , otherwise use <
+; 
+; 2007-08-01 10:49:57 PDT ADVENT\astanchi
+; APX SCR #3307074 #csusapr,#csuscpr,#csusqpr not showing as reconciled ->
+; Trade Amount:  
+; If #recprec or #<type>apr is defined then use <= , otherwise use <
+; Quantity: 
+; If cash
+;   If #recprec or #<typeqpr> is defined then use <=, otherwise use <
+;   Cash uses #__minmv value for #_minqty
+;   #__minmv can be overwritten by #recprec
+; If not cash
+;   If #qprec or #<typeqpr> is defined then use <=, otherwise use <
+; Cost Basis:    
+; If #cprec or #<type>cpr is defined then use <= , otherwise use <
+; 
+; 2007-06-26 11:55:11 PDT ADVENT\astanchi
+; APX 3311692 Update report dialog text to reference APX instead of Axys.
+; 
+; 53    8/08/06 5:05p Jvarughe
+; APX #3307096  : Portfolio flagged as unreconciled when there are no
+; holdings in cli or pos  --> don't check for $status anymore for pos
+; 'file', now just check for either port trans or pos trans.
+; 
+; 52    7/25/06 5:15p Jvarughe
+; APX #3308926 : SQL Error when running for a group with consolidated
+; member groups --> check $:gnum and append +@ where appropriate.
+; 
+; 50    1/25/05 2:53p Gxa
+; Fix for SCRs #7001512 and #7001513 (by HsinYi). Reverted lcwong's
+; change on comparison between #_difun and #_minqty. The change was not
+; relevant to #7001437 and caused #7001512 and #7001513.
+;
+; 49    8/19/04 11:27a Lcwong
+; Dataport #7001437 : Sipos shows positions as unreconciled even if it's
+; reconciled after rounding
+; - When adjusting the quantity difference (#_difun) to be sensitive to
+; the "Decimals in Quantity" setting in Security Type information
+; (type.inf), the report was not using the correct operator.  Should be
+; #9_difun, rather than #7_difun.
+; - Also, changed the comparison between #_difun and #_minqty to be "<",
+; rather than "<=", since #_difun should be less than #_minqty to be
+; considered approximately zero.
+;
+; 48    1/14/04 4:06p Mg
+; "Resync'd" with R1 (DP 3.8) revision 38.
+;
+; 38    1/12/04 11:07a Nvashist
+; 7001409 : Displays reconciled positions incorrectly when using "Ignore
+; All Security Types" --> still more fixes
+;
+; 37    1/09/04 5:22p Nvashist
+; 7001409 : Displays reconciled positions incorrectly when using "Ignore
+; All Security Types" --> more fixes
+;
+; 36    1/09/04 10:24a Nvashist
+; 7001409 : Displays reconciled positions incorrectly when using "Ignore
+; All Security Types" --> redid the fix for  7001370, which in turn fixed
+; this SCR.
+;
+; 35    10/10/03 4:52p Jvarughe
+; Dataport #7001370  : Report not denoting reconciled/unreconciled
+; properly when ignoring type  --> in label ~C, initial #_tmd variables
+; to zero before loan tran.
+;
+; 34    10/01/03 3:34p Jvarughe
+; Dataport #7001233  : Allow option to ignore trade date in .pos file -->
+; add checkbox to dialog, then sum, pair and set internal cutdate to end
+; of time when reading .pos file.
+;
+; 33    10/01/03 3:28p Jvarughe
+; Added 4.X code to the 3.X branch.
+;
+; 47    7/22/03 11:40a Nvashist
+; Dataport #7001326  : # cprec is not working for Sipos 30 report --> was
+; happening because the report was getting into the "#cprec @?" logic.
+; Fixed the same for #recprec
+;
+; 46    6/24/03 12:35p Nvashist
+; Dataport #7001173 : Sipos30 - the report is ignoring the $reoutxx label
+; --> changed the if condition.
+; Dataport #7001311 : Modify descriptions in Reconcile specific
+; securities/Exclude securities dialogs --> done
+;
+; 45    6/03/03 1:20p Caric
+; Dataport SCR #7001142:  For Cash positions the Reconciliation report
+; does not show a 0.01 difference-->SIPOS30.rep: fix qty comparison for
+; Cash to be consistent w/ MV and CV comparisons to tolerance
+;
+; 44    5/19/03 11:17a Caric
+; Dataport SCR #7001221:  Sipos not picking up prices for some securities
+; when running for more than one portfolio-->add pread after load cli
+;
+; 43    5/16/03 3:51p Caric
+; Dataport SCR #7001142:  For Cash positions the Reconciliation report
+; does not show a 0.01 difference-->SIPOS30.rep: Changed logic to use "<"
+; when comparing MV and CV differences to tolerance when #recprec and
+; #cprec are undefined. When #recprec and #cprec are defined, use "<=" to
+; compare to these tolerance labels.
+;
+; 42    5/01/03 3:07p Nvashist
+; Dataport #7001263 : sipos to support XML mode (-x) to generate XML
+; output --> force reconciliation in a couple of scenarios.
+;
+; 41    5/01/03 10:56a Nvashist
+; Dataport #7001263 : sipos to support XML mode (-x) to generate XML
+; output --> write xml output if run with $arg = x
+;
+; 40    4/07/03 9:46a Nvashist
+; Dataport #7001200 : Sipos30 isn't reading position files --> removed
+; absolute path. changed $:file to $:fileo
+;
+; 39    11/25/02 5:09p Nvashist
+; Dataport #7001173 : Sipos30 - the report is ignoring the $reoutxx label
+; --> :sval1 was getting overwritten
+; Dataport #7001027 : Modify error message when *.pos contains only
+; unsupervised assets --> changed text
+;
+; 38    9/24/02 4:49p Nvashist
+; Dataport #7001077 : Ability to ignore security types when running
+; sipos30.rep --> added a new check box.
+;
+; 37    9/10/02 11:26a Nvashist
+; Dataport #7001107 : Ability to reconcile a single security --> also
+; added the ability to reconcile on symbol only ( ignoring the type) -
+; marks all such securities as reconciled if there sum total is
+; reconciled.
+;
+; 36    9/06/02 2:11p Nvashist
+; Dataport #7001063 : Exclude specific securities from showing up in
+; Sipos30.rep --> added the functionality to exclude & include a set of
+; security types or symbols. Did some clean up of the report.
+;
+; 35    9/05/02 4:39p Nvashist
+; Dataport #7001069 : Custom label #cprec doesn't work at Portfolio
+; Settings --> made report senstive to #cprec, #qprec,#mbsprec & #recprec
+; at the portfolio settings level.
+; Dataport #7001027 : Modify error message when *.pos contains only
+; unsupervised assets  --> done
+; Fixed some other formatting issues & false missing price error msg.
+;
+; 34    8/30/02 3:40p Nvashist
+; Dataport #7001125 : Report shows improper message when no pos file
+; avail for zero holdings in cli --> report was reading the wrong $status
+; value.
+; Dataport #7000893 : Remove Information button from sipos30.rep dialog
+; box --> done
+;
+; 33    8/02/02 5:35p Cmy
+; Retrofit change made to R1 dated 7/25/2002 by CYIP for DP 3.7 beta 3
+; patch.
+;
+; 32    8/02/02 5:34p Cmy
+; retrofit change to sipos on R1 branch dated 5/24/2002 by JWANG.
+;
+; 30    5/10/02 4:02p Jwang
+; 7001052- Sipos30.rep needs to display original face value if user
+; selects "Use Original Face"
+; 7001071- Sipos30.rep not picking up value in Advent Quantity column
+; 7001072- Sipos30.rep not displaying security description on report
+; 7001075- "$pmai" undefined error message appearing on report
+;
+; 29    4/17/02 5:04p Jwang
+; SCR 7001030- Custom labels for tolerances should be inclusive of the
+; value defined
+; SCR 7001047- The Accrued Interest field in Report Settings dialog box
+; needs to be active
+;
+; 28    12/18/01 9:26p Mg
+; Checking in changes made by SMG for the following SCRs:
+; SCR 7000973 - Display a zero and not a "?" when position does not exist
+; in portfolio
+; SCR 7000993 - Display a "?' instead of a zero when price file is
+; missing
+; SCR 7000828 - Allow for more than 10,000 unreconciled portfolios
+;
+; 25    7/09/01 5:51p Mg
+; Checking in the following fixes for SMG:
+; SCR 7000971- Display portfolio name for reconciled portfolio
+; SCR 7000972- Summation of market value and cost on report for each
+; portfolio
+; SCR 7000975- Difference of less than .02 is not being picked up by
+; report consistently.
+; SCR 7000879- Report puts in a zero value when it cannot calculate
+; original face of MBS security.
+;
+; 23    1/16/01 2:51p Admin
+; Patch changes from branched version of this file.
+;
+; 20    11/28/00 2:47p Cmy
+; SCR 7000885 : fixed by Saima
+;
+; 15    6/16/00 11:36p Mg
+; Checking in changes made by Saima Gowani for these SCR's: 7000748,
+; 7000577, 7000743 and 7000798.
+;
+; 11    8/05/98 6:24p Dmw
+; Replaced message that reads "You must reconcile again for this
+; portfolio using the correct date."
+;
+; 10    6/23/98 4:47p Dmw
+; report was using #::tcost0 to calculate cost on a manually lumped
+; position.  This was not working.  Now the report accumulates cost in
+; nval3 while manually lumping.
+;
+; 9     6/03/98 5:01p Dmw
+; Added a checkbox to include unsupervised securities on the report.
+;
+; 8     1/08/98 3:35p Dmw
+; Added undeferr to avoid error messages
+;
+; 7     1/08/98 8:56a Dmw
+; Added sensitivity to firmwide label #mbsprec which acts just like
+; #qprec except only for MBS types.  Up to 10 MBS types can be defined by
+; using firmwide labels $recsty0 - $recsty9. #mbsprec takes precedence
+; over #qprec.
+;
+; 6     12/01/97 3:24p Dmw
+; Added code to initialize nvals when summing pos file info to the list
+; and the security is not already in the list.
+;
+; 5     10/28/97 4:53p Dmw
+; lots can be excluded by lot location by entering the lot location in a
+; custom label from $exloc0 - $exloc9.
+;
+; 4     10/28/97 1:17p Dmw
+; Changed message that prints when there are no positions as of cutdate
+; in the pos file.  Also now treats a missing market value as an
+; exception.
+;
+; 3     8/04/97 5:24p Dmw
+; Modified to be more multicurrency aware.
+;
+; 2     6/17/97 5:49p Dmw
+;
+; 1     6/17/97 9:13a Admin
+Revision 1.35  1997/05/13  10:24:12  dmw
+970430-1717-DY - Properly centered date.
+
+Revision 1.34  1997/05/07  11:36:46  dmw
+Removed leftover debug line.
+
+Revision 1.33  1997/04/03  10:40:14  dmw
+set differences to display to quantity or currency precision.
+
+Revision 1.32  1997/03/24  11:59:28  dmw
+Added quantity precision in custom firmwide label #qprec, which takes
+precedence over #minqty if defined.
+Removed error message that prints when the cli file is empty, and the pos
+file doesn't exist.
+Changed all dollar amounts printed to use currency precision (#8) not
+quantity precision (#9).
+Added the ability to create a group file consisting of a list of the
+unreconciled portfolios if option #2 is chosen.
+Added an option to page break between portfolios.
+
+Revision 1.31  1997/02/24  14:23:45  unknown
+Added generic settle date option
+
+Revision 1.30  1997/02/21  11:18:27  dmw
+Removed leftover debug statement.
+
+Revision 1.29  1997/02/19  18:51:10  dmw
+MR#970219-1326-GS: Cost and market value recon fields for cash balances are
+now correct.  Was using ::tcost instead of :bucks for cost on cash.
+
+Revision 1.28  1997/02/07  14:10:17  dmw
+Cost recon was not picking up original cost.
+
+Revision 1.27  1997/01/27  17:01:55  dmw
+If cli file has no transactions and pos file is missing, portfolio is marked
+as reconciled. If cli file has transactions and pos file is missing, a special
+message is printed, but portfolio is still marked unreconciled.
+
+Revision 1.26  1997/01/22  13:46:45  dmw
+Moved all list dealloc's to right before next cli.  Was causing an Invalid
+Page fault if you attempt to print $:file after dealloc'ing the list.
+
+Revision 1.25  1997/01/22  10:58:12  dmw
+Corrected misspelling.
+
+Revision 1.24  1997/01/15  08:10:36  dmw
+Removed StateStreet settlement date recon option. Removed title for
+Glenmede Trust from arg 'g'.  This arg is now used for all generic cost recon
+reports. Fixed MR 970109-1021-GS.
+
+Revision 1.23  1996/12/10  15:13:05  dmw
+reworked dialogs to enhance usability.
+
+Revision 1.22  1996/10/31  15:33:36  dmw
+Added reconciliation by cost basis.  Made minor changes to make report more
+2.x compliant.
+
+Revision 1.21  1996/10/07  11:15:55  dxb
+cleaning up switches and dialog switches,
+only dialogs A and C are relevant now,
+and we are using a general report title now,
+AND date basis is controlled by custom switch
+on a custom argument for the IP if basis is
+settle date, default basis is trade
+
+Revision 1.20  1996/10/07  08:57:53  dxb
+took out date basis switch for Lehman, not needed for
+DP1.4 and higher builds for LE and LB
+
+Revision 1.19  1996/10/07  08:04:10  dxb
+rollback to have custom args, but implemented changes for
+two blank lines and redirected screen messages to report;
+only custom reports prompt for date basis, or for whether to
+reconcile by market value
+
+Revision 1.14  1996/09/24  17:15:37  dxb
+MR#17129, recognize bucks as mval NOT origcost for li trans
+
+Revision 1.13  1996/08/30  13:09:30  dxb
+added functionality for reporting recon. portfolios,
+specified in Mr 8139
+
+Revision 1.12  1996/07/30  09:49:15  dxb
+changed other occurences of last thing commented.
+
+Revision 1.11  1996/07/30  09:47:56  dxb
+changed duplicate hotkey on Include Security Desc prompt
+
+Revision 1.10  1996/04/23  10:16:26  dxb
+changed so that only 7 digits of the difun is
+recognized before rounding to type.inf precision, whose
+maximum precision is 7 digits anyway; otherwise if
+precision of 8 or 9 is used, numeric conversion from
+binary of difun results in incorrect numbers
+
+Revision 1.9  1996/04/09  11:06:26  dxb
+changed title to read Interface rather than General,
+and changed dialog box to read positions downloaded from
+your Interface Partner
+
+Revision 1.8  1996/02/20  17:54:08  dxb
+put correct escape sequences in HELP section
+
+Revision 1.7  1996/01/31  11:12:40  dxb
+took out $arg switches for standard reports
+
+Revision 1.6  1996/01/19  09:01:31  dxb
+made default title for general report which
+occurs when NO argument is set
+
+Revision 1.5  1996/01/18  16:14:01  dxb
+Trust3000 should be by Trade Date
+
+Revision 1.4  1996/01/08  11:17:10  dxb
+took out 1.x comments
+
+Revision 1.3  1996/01/08  10:08:58  dxb
+added sec desc prompt to all dialogs
+
+Revision 1.2  1995/12/27  16:00:21  dxb
+changed report title strings to use standard title
+string so that style changes will apply to all those
+strings
+
+Revision 1.1  1995/12/27  11:15:57  dxb
+Initial revision
